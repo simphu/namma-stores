@@ -84,32 +84,43 @@ useEffect(() => {
 
 
 const handleStatusChange = async (id: string, newStatus: string) => {
-  // 🔥 1. Optimistic UI update (instant)
+  // 🔥 1. Optimistic UI update
   setOrders((prev) =>
     prev.map((order) =>
       order.id === id ? { ...order, status: newStatus } : order
     )
   );
 
-  // 🔥 2. Update DB
-  const { error } = await supabase
-    .from('orders')
-    .update({ status: newStatus })
-    .eq('id', id);
+  try {
+    // 🔥 2. CALL BACKEND API (IMPORTANT CHANGE)
+    const res = await fetch('/api/admin/orders/update-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId: id,
+        status: newStatus
+      })
+    });
 
-  if (error) {
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Update failed');
+    }
+
+    toast.success(`Order ${newStatus}`);
+
+  } catch (error) {
     console.error(error);
     toast.error('Failed to update');
 
-    // rollback: refetch from DB
-const { data } = await supabase
-  .from('orders')
-  .select(`*, order_items (*)`)
-  .order('created_at', { ascending: false });
+    // 🔥 rollback
+    const { data } = await supabase
+      .from('orders')
+      .select(`*, order_items (*)`)
+      .order('created_at', { ascending: false });
 
-if (data) setOrders(data);
-  } else {
-    toast.success(`Order ${newStatus}`);
+    if (data) setOrders(data);
   }
 };
 

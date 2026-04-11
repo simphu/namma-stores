@@ -78,24 +78,37 @@ export default function AdminDashboardClient() {
         {/* TEST BUTTON */}
         <div className="mb-4">
           <button
-            onClick={async () => {
-              const res = await fetch('/api/orders/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  user_id: 'user_1',
-                  seller_id: 'seller_1',
-                  total: 1000,
-                  order_type: 'store'
-                })
-              });
+  onClick={async () => {
+    try {
+      const payload = {
+        user_id: 'user_1',
+        seller_id: 'seller_1', // 🔥 IMPORTANT
+        total: 1000,
+        order_type: 'store'
+      };
 
-              alert('Order Created!');
-            }}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
-          >
-            Test Create Order
-          </button>
+      console.log("📤 Sending order:", payload);
+
+      const res = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      console.log("✅ API RESPONSE:", data);
+
+      alert('Order Created!');
+
+    } catch (err) {
+      console.error(err);
+    }
+  }}
+  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
+>
+  Test Create Order
+</button>
         </div>
 
         {/* KPI */}

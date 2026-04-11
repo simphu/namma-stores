@@ -5,7 +5,9 @@ export async function POST(req: Request) {
   try {
     const { orderId, status } = await req.json();
 
-    // ✅ 1. Update order AND get updated row
+    console.log("🔥 Incoming status:", status);
+
+    // ✅ 1. Update order AND fetch row
     const { data: order, error } = await supabase
       .from('orders')
       .update({ status })
@@ -13,32 +15,44 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error || !order) {
+      console.error("❌ Order fetch error:", error);
+      throw new Error('Order update failed');
+    }
 
-    // 🔥 2. IF ORDER DELIVERED → UPDATE WALLET
-    if (status === 'delivered') {
+    console.log("📦 Order data:", order);
+
+    // 🔥 2. FIX: safer status check
+    if (status?.toLowerCase() === 'delivered') {
       const seller_id = order.seller_id;
-      const earning = order.seller_earning;
+      const earning = Number(order.seller_earning || 0);
 
       console.log("💰 Wallet update triggered:", { seller_id, earning });
 
-      // Check if wallet already exists
-      const { data: wallet } = await supabase
+      // 🔥 FIX: don't use .single() directly
+      const { data: wallet, error: walletError } = await supabase
         .from('seller_wallet')
         .select('*')
         .eq('seller_id', seller_id)
-        .single();
+        .maybeSingle();
+
+      if (walletError) {
+        console.error("❌ Wallet fetch error:", walletError);
+      }
 
       if (wallet) {
-        // ✅ Update existing wallet
+        console.log("🔄 Updating existing wallet");
+
         await supabase
           .from('seller_wallet')
           .update({
-            balance: wallet.balance + earning
+            balance: Number(wallet.balance || 0) + earning
           })
           .eq('seller_id', seller_id);
+
       } else {
-        // ✅ Create new wallet
+        console.log("🆕 Creating new wallet");
+
         await supabase
           .from('seller_wallet')
           .insert({
