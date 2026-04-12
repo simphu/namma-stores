@@ -7,10 +7,30 @@ export async function POST(req: Request) {
 
     console.log("🔥 Incoming status:", status);
 
-    // ✅ 1. Update order AND fetch row
+    // ✅ PREPARE UPDATE DATA
+    let updateData: any = { status };
+
+    // 🟢 ADD LIFECYCLE TIMESTAMPS
+    if (status === 'accepted') {
+      updateData.accepted_at = new Date().toISOString();
+    }
+
+    if (status === 'preparing') {
+      updateData.preparing_at = new Date().toISOString();
+    }
+
+    if (status === 'ready') {
+      updateData.ready_at = new Date().toISOString();
+    }
+
+    if (status === 'delivered') {
+      updateData.delivered_at = new Date().toISOString();
+    }
+
+    // ✅ UPDATE ORDER + FETCH
     const { data: order, error } = await supabase
       .from('orders')
-      .update({ status })
+      .update(updateData)
       .eq('id', orderId)
       .select()
       .single();
@@ -22,43 +42,46 @@ export async function POST(req: Request) {
 
     console.log("📦 Order data:", order);
 
-    // 🔥 2. FIX: safer status check
+    // 🔥 WALLET UPDATE ONLY ON DELIVERY
     if (status?.toLowerCase() === 'delivered') {
       const seller_id = order.seller_id;
       const earning = Number(order.seller_earning || 0);
 
       console.log("💰 Wallet update triggered:", { seller_id, earning });
 
-      // 🔥 FIX: don't use .single() directly
-      const { data: wallet, error: walletError } = await supabase
-        .from('seller_wallet')
-        .select('*')
-        .eq('seller_id', seller_id)
-        .maybeSingle();
-
-      if (walletError) {
-        console.error("❌ Wallet fetch error:", walletError);
-      }
-
-      if (wallet) {
-        console.log("🔄 Updating existing wallet");
-
-        await supabase
-          .from('seller_wallet')
-          .update({
-            balance: Number(wallet.balance || 0) + earning
-          })
-          .eq('seller_id', seller_id);
-
+      if (!seller_id || earning <= 0) {
+        console.log("⚠️ Skipping wallet update (invalid data)");
       } else {
-        console.log("🆕 Creating new wallet");
-
-        await supabase
+        const { data: wallet, error: walletError } = await supabase
           .from('seller_wallet')
-          .insert({
-            seller_id,
-            balance: earning
-          });
+          .select('*')
+          .eq('seller_id', seller_id)
+          .maybeSingle();
+
+        if (walletError) {
+          console.error("❌ Wallet fetch error:", walletError);
+        }
+
+        if (wallet) {
+          console.log("🔄 Updating existing wallet");
+
+          await supabase
+            .from('seller_wallet')
+            .update({
+              balance: Number(wallet.balance || 0) + earning
+            })
+            .eq('seller_id', seller_id);
+
+        } else {
+          console.log("🆕 Creating new wallet");
+
+          await supabase
+            .from('seller_wallet')
+            .insert({
+              seller_id,
+              balance: earning
+            });
+        }
       }
     }
 

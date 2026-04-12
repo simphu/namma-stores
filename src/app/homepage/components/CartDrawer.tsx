@@ -20,11 +20,27 @@ export default function CartDrawer({ open, onClose, items, onUpdateQty, onRemove
   const totalItems = items.reduce((s, i) => s + i.qty, 0);
 
   const handleProceedToCheckout = () => {
-    // Save cart to localStorage so checkout page can read it
-    localStorage.setItem('checkout_cart', JSON.stringify(items));
-    onClose();
-    router.push('/checkout');
-  };
+  // 🔍 Ensure every item has shopId (critical for backend)
+  const validatedItems = items.map(item => {
+    if (!item.shopId) {
+      console.error("❌ Missing shopId in item:", item);
+    }
+
+    return {
+      ...item,
+      shopId: item.shopId || '', // fallback to prevent crash
+    };
+  });
+
+  // 🧪 Debug (check once in console)
+  console.log("🛒 Saving cart to checkout:", validatedItems);
+
+  // 🚀 Save to localStorage
+  localStorage.setItem('checkout_cart', JSON.stringify(validatedItems));
+
+  onClose();
+  router.push('/checkout');
+};
 
   if (!open) return null;
 

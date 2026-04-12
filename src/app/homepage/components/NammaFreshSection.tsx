@@ -19,12 +19,15 @@ export default function NammaFreshSection({ products, cartItems, onAddToCart }: 
     setQuantities(prev => ({ ...prev, [product.id]: newQty }));
 
     onAddToCart({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-      shopId: product.shopId || 'shop-1',
-      shopName: product.shopName || 'Namma Fresh',
-    });
+  id: product.id,
+  name: product.name,
+  price: product.price,
+
+  // ✅ TEMP FIX (USE REAL SELLER)
+  shopId: 'seller_1',
+
+  shopName: 'Namma Fresh',
+});
   };
 
   const handleDecrement = (id: string) => {

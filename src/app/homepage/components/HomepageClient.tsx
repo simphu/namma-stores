@@ -49,28 +49,46 @@ export default function HomepageClient({ selectedAddress, products }: any) {
 
 
   const addToCart = (item: Omit<CartItem, 'qty'>) => {
-    const existingShopId = cartItems[0]?.shopId;
+  // 🔥 SAFETY CHECK (CRITICAL)
+  if (!item.shopId) {
+    console.error("❌ shopId missing in item:", item);
+    toast.error("Something went wrong. Please try again.");
+    return;
+  }
 
-    if (existingShopId && existingShopId !== item.shopId) {
-      toast.error('Cart conflict', {
-        description: 'You can only order from one shop at a time.',
-        action: { label: 'Clear Cart', onClick: () => setCartItems([]) },
-      });
-      return;
+  const existingShopId = cartItems[0]?.shopId;
+
+  if (existingShopId && existingShopId !== item.shopId) {
+    toast.error('Cart conflict', {
+      description: 'You can only order from one shop at a time.',
+      action: { label: 'Clear Cart', onClick: () => setCartItems([]) },
+    });
+    return;
+  }
+
+  setCartItems(prev => {
+    const existing = prev.find(ci => ci.id === item.id);
+
+    if (existing) {
+      return prev.map(ci =>
+        ci.id === item.id ? { ...ci, qty: ci.qty + 1 } : ci
+      );
     }
 
-    setCartItems(prev => {
-      const existing = prev.find(ci => ci.id === item.id);
-
-      if (existing) {
-        return prev.map(ci =>
-          ci.id === item.id ? { ...ci, qty: ci.qty + 1 } : ci
-        );
+    return [
+      ...prev,
+      {
+        ...item,
+        shopId: item.shopId,        // ✅ ENSURE PASSED
+        shopName: item.shopName || 'Store', // fallback
+        qty: 1
       }
+    ];
+  });
 
-      return [...prev, { ...item, qty: 1 }];
-    });
-  };
+  // ✅ DEBUG (VERY IMPORTANT)
+  console.log("🛒 Added to cart:", item);
+};
 
   const removeFromCart = (id: string) => {
     setCartItems(prev => prev.filter(ci => ci.id !== id));

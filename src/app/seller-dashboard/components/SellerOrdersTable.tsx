@@ -13,6 +13,7 @@ type OrderStatus =
   | 'ready'
   | 'out_for_delivery'
   | 'delivered'
+  | 'cancelled'
   | 'rejected';
 
 interface OrderItem {
@@ -30,6 +31,8 @@ interface Order {
   address?: string;
   payment_mode?: string;
   order_items?: OrderItem[];
+  customer_name?: string;
+  customer_phone?: string;
 }
 
 type Props = {
@@ -81,7 +84,26 @@ useEffect(() => {
         );
 
 
-
+const getStatusStyle = (status: string) => {
+  switch (status) {
+    case 'pending':
+      return 'bg-yellow-50 border-l-4 border-yellow-400';
+    case 'accepted':
+      return 'bg-blue-50 border-l-4 border-blue-400';
+    case 'preparing':
+      return 'bg-orange-50 border-l-4 border-orange-400';
+    case 'ready':
+      return 'bg-purple-50 border-l-4 border-purple-400';
+    case 'delivered':
+      return 'bg-green-50 border-l-4 border-green-500';
+    case 'rejected':
+      return 'bg-red-50 border-l-4 border-red-500';
+    case 'cancelled':
+      return 'bg-gray-100 border-l-4 border-gray-400';
+    default:
+      return '';
+  }
+};
 
 const handleStatusChange = async (id: string, newStatus: string) => {
   // 🔥 1. Optimistic UI update
@@ -149,7 +171,7 @@ const handleStatusChange = async (id: string, newStatus: string) => {
       </div>
 
       {/* Orders */}
-      <div className="divide-y">
+      <div className="p-4 space-y-4">
         {filteredOrders.length === 0 ? (
           <div className="p-6 text-center text-gray-500">
             No orders yet
@@ -161,32 +183,66 @@ const handleStatusChange = async (id: string, newStatus: string) => {
             return (
   <div
     key={order.id}
-    className={`p-4 hover:bg-gray-50 ${
-      order.id === filteredOrders[0]?.id
-        ? 'bg-yellow-50 border-l-4 border-yellow-400'
-        : ''
+    className={`p-4 ${getStatusStyle(order.status)}`}
+    >
+    {/* Top row */}
+    <div className="flex justify-between items-start">
+  {/* LEFT SIDE */}
+  <div>
+    {/* ✅ Order ID */}
+    <p className="font-semibold">
+      Order #{order.id.slice(-5).toUpperCase()}
+    </p>
+  
+    {/* ✅ Item Preview (VERY IMPORTANT) */}
+    {order.order_items && order.order_items.length > 0 && (
+      <p className="text-sm text-gray-600 mt-1">
+        {order.order_items?.[0]?.name} × {order.order_items?.[0]?.qty}
+        {(order.order_items?.length || 0) > 1 &&
+  ` +${(order.order_items?.length || 0) - 1} more`}
+      </p>
+    )}
+
+    {/* ✅ Price */}
+    <p className="text-sm text-gray-500 mt-1">
+      ₹{order.total}
+    </p>
+
+    {/* ✅ Time */}
+    <p className="text-xs text-gray-400">
+      {new Date(order.created_at).toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        hour: 'numeric',
+        minute: 'numeric',
+      })}
+    </p>
+  </div>
+
+  {/* ✅ RIGHT SIDE STATUS BADGE */}
+  <span
+    className={`px-3 py-1 text-xs font-bold rounded-full ${
+      order.status === 'delivered'
+        ? 'bg-green-100 text-green-700'
+        : order.status === 'rejected'
+        ? 'bg-red-100 text-red-700'
+        : order.status === 'cancelled'
+        ? 'bg-gray-200 text-gray-600'
+        : order.status === 'preparing'
+        ? 'bg-orange-100 text-orange-700'
+        : order.status === 'ready'
+        ? 'bg-purple-100 text-purple-700'
+        : order.status === 'accepted'
+        ? 'bg-blue-100 text-blue-700'
+        : 'bg-yellow-100 text-yellow-700'
     }`}
   >
-                {/* Top row */}
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-semibold">
-                      #{order.id.slice(-6)}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      ₹{order.total}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(order.created_at).toLocaleString('en-IN', {
-  day: 'numeric',
-  month: 'short',
-  hour: 'numeric',
-  minute: 'numeric',
-})}
-                    </p>
-                  </div>
-
-<div className="flex gap-2 flex-wrap">
+    {order.status}
+  </span>
+</div>
+                
+{/* ACTION BUTTONS */}
+<div className="flex gap-2 flex-wrap mt-3">
   {(order.status === 'placed' || order.status === 'pending') && (
     <>
       <button
@@ -241,7 +297,6 @@ const handleStatusChange = async (id: string, newStatus: string) => {
     </button>
   )}
 
-  {/* Expand button stays same */}
   <button
     onClick={() =>
       setExpandedOrder(isExpanded ? null : order.id)
@@ -255,26 +310,40 @@ const handleStatusChange = async (id: string, newStatus: string) => {
     />
   </button>
 </div>
-                </div>
 
                 {/* Expanded */}
                 {isExpanded && (
                   <div className="mt-3 bg-gray-50 p-3 rounded">
                     {/* Items */}
                     <div className="space-y-1">
-                      {order.order_items?.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex justify-between text-sm"
-                        >
-                          <span>
-                            {item.name} × {item.qty}
-                          </span>
-                          <span>
-                            ₹{(item.price || 0) * (item.qty || 0)}
-                          </span>
-                        </div>
-                      ))}
+                      {/* Items */}
+{order.order_items?.map((item) => (
+  <div
+    key={item.id}
+    className="flex justify-between text-sm"
+  >
+    <span>
+      {item.name} × {item.qty}
+    </span>
+
+    <span>
+      ₹{(item.price || 0) * (item.qty || 0)}
+    </span>
+  </div>
+))}
+
+{/* ✅ Customer Info (OUTSIDE LOOP) */}
+{order.customer_name && (
+  <p className="text-sm text-gray-700 mt-2">
+    👤 {order.customer_name}
+  </p>
+)}
+
+{order.customer_phone && (
+  <p className="text-sm text-gray-600">
+    📞 {order.customer_phone}
+  </p>
+)}
                     </div>
 
                     {/* Address */}

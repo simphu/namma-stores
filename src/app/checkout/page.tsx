@@ -12,11 +12,16 @@ interface CartItem {
   name: string;
   price: number;
   qty: number;
+  shopId:string,
   shopName: string;
 }
 
 type DeliveryMode = 'delivery' | 'pickup';
 type PaymentMode = 'cod' | 'online';
+type Address = {
+  full_address: string;
+  area: string;
+};
 
 
 
@@ -96,24 +101,22 @@ const handlePlaceOrder = async () => {
   setPlacing(true);
 
   try {
-    const res = await fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        items,
-        total,
-        address:
-          deliveryMode === 'delivery'
-            ? selectedAddr?.address || 'No address'
-            : 'Pickup',
-
-        status: 'pending',
-        shop_name: items[0]?.shopName || 'Namma Fresh',
-        delivery_mode: deliveryMode,
-        payment_mode: paymentMode,
-        created_at: new Date().toISOString(),
-      }),
-    });
+    const res = await fetch('/api/orders/create', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+  user_id: 'user_1',
+  seller_id: items[0]?.shopId,
+  total: total,
+  order_type: 'store',
+  address: selectedAddr?.address || 'Whitefield',
+  delivery_mode: deliveryMode || 'delivery',
+  item_count: items.reduce((sum, i) => sum + i.qty, 0),
+  area: selectedAddr?.label || 'Whitefield',
+  items: items,
+  instructions: instructions || '',
+}),
+});
 
     const data = await res.json();
 
