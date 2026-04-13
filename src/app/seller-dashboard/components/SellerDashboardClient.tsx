@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import SellerWallet from './SellerWallet';
 import Link from 'next/link';
 
-export default function SellerDashboardClient({ activeTab }: any) {
+export default function SellerDashboardClient({ activeTab, setOrderCount }: any) {
 
   const [shopOnline, setShopOnline] = useState(true);
   const [orders, setOrders] = useState<any[]>([]);
@@ -22,11 +22,13 @@ export default function SellerDashboardClient({ activeTab }: any) {
     const fetchOrders = async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select(`
-          *,
-          order_items (*)
-        `)
-        .order('created_at', { ascending: false });
+.select(`
+  *,
+  order_items (*)
+`)
+.eq('seller_id', 'seller_1') // TEMP HARDCODE
+.order('created_at', { ascending: false });
+
 
       if (!error && data) {
         const currentIds = data.map((o) => o.id);
@@ -44,6 +46,8 @@ export default function SellerDashboardClient({ activeTab }: any) {
 
         setPrevOrderIds(currentIds);
         setOrders(data);
+        const pendingOrders = data.filter((o) => o.status === 'pending');
+        setOrderCount?.(pendingOrders.length);
       }
     };
 

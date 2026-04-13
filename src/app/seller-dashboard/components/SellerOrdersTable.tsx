@@ -32,7 +32,7 @@ interface Order {
   order_items?: OrderItem[];
   customer_name?: string;
   customer_phone?: string;
-  instruction?: string;
+  instructions?: string;
 }
 
 type Props = {
@@ -171,9 +171,9 @@ export default function SellerOrdersTable({ orders, setOrders }: Props) {
 )}
 
                   {/* NOTE */}
-                  {order.instruction && (
+                  {order.instructions && (
                     <p className="text-orange-600 text-xs mt-1">
-                      📝 {order.instruction}
+                      📝 {order.instructions}
                     </p>
                   )}
 

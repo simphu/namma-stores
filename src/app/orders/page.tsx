@@ -259,6 +259,7 @@ useEffect(() => {
         status: o.status,
         shopName: o.shop_name || "Namma Fresh",
         createdAt: o.created_at,
+        instructions: o.instructions,
       }));
 
       const currentIds = formatted.map((o) => o.id);

@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { items, total, address } = body;
+    const { items, total, address, instructions, seller_id, user_id } = body;
 
     // 1. Create order
     const { data: order, error: orderError } = await supabase
@@ -14,6 +14,9 @@ export async function POST(req: Request) {
           status: 'pending',
           total,
           address,
+          instructions,
+          seller_id,    
+           user_id,
         },
       ])
       .select()

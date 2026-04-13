@@ -1,147 +1,10 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Star, Clock, MapPin, ChevronRight, Filter, Zap } from 'lucide-react';
 import type { CartItem } from './HomepageClient';
-import ShopDetailModal from './ShopDetailModal';
+import { supabase } from '@/lib/supabase';
 
-export const shops = [
-  {
-    id: 'shop-001',
-    name: 'Fresh Basket Store',
-    category: 'Grocery & Essentials',
-    rating: 4.6,
-    reviewCount: 234,
-    distance: '0.4 km',
-    deliveryTime: '15–25 min',
-    deliveryFee: 20,
-    minOrder: 99,
-    isOpen: true,
-    isFeatured: true,
-    offerText: '10% off on orders above ₹299',
-    tags: ['Grocery', 'Dairy', 'Snacks'],
-    emoji: '🛒',
-    bgColor: 'from-green-400 to-emerald-500',
-  },
-  {
-    id: 'shop-002',
-    name: 'Whitefield Medical',
-    category: 'Pharmacy',
-    rating: 4.8,
-    reviewCount: 189,
-    distance: '0.7 km',
-    deliveryTime: '20–30 min',
-    deliveryFee: 0,
-    minOrder: 0,
-    isOpen: true,
-    isFeatured: false,
-    offerText: 'Free delivery on all orders',
-    tags: ['Medicines', 'Healthcare', 'Baby Care'],
-    emoji: '💊',
-    bgColor: 'from-blue-400 to-blue-600',
-  },
-  {
-    id: 'shop-003',
-    name: 'Ravi Bakery',
-    category: 'Bakery & Sweets',
-    rating: 4.5,
-    reviewCount: 312,
-    distance: '1.1 km',
-    deliveryTime: '25–35 min',
-    deliveryFee: 25,
-    minOrder: 149,
-    isOpen: true,
-    isFeatured: true,
-    offerText: 'Buy 2 get 1 on pastries',
-    tags: ['Bread', 'Cakes', 'Sweets'],
-    emoji: '🧁',
-    bgColor: 'from-amber-400 to-orange-500',
-  },
-  {
-    id: 'shop-004',
-    name: 'Sri Venkateshwara Flowers',
-    category: 'Flowers & Puja',
-    rating: 4.3,
-    reviewCount: 98,
-    distance: '1.4 km',
-    deliveryTime: '20–30 min',
-    deliveryFee: 30,
-    minOrder: 80,
-    isOpen: false,
-    isFeatured: false,
-    offerText: null,
-    tags: ['Flowers', 'Puja Items', 'Garlands'],
-    emoji: '🌺',
-    bgColor: 'from-pink-400 to-rose-500',
-  },
-  {
-    id: 'shop-005',
-    name: 'Daily Needs Mart',
-    category: 'Supermarket',
-    rating: 4.4,
-    reviewCount: 456,
-    distance: '1.8 km',
-    deliveryTime: '30–45 min',
-    deliveryFee: 15,
-    minOrder: 199,
-    isOpen: true,
-    isFeatured: false,
-    offerText: '₹30 off on first order',
-    tags: ['Grocery', 'Household', 'Personal Care'],
-    emoji: '🏪',
-    bgColor: 'from-violet-400 to-purple-500',
-  },
-  {
-    id: 'shop-006',
-    name: 'Spice Garden',
-    category: 'Spices & Dry Goods',
-    rating: 4.7,
-    reviewCount: 167,
-    distance: '2.2 km',
-    deliveryTime: '35–50 min',
-    deliveryFee: 20,
-    minOrder: 149,
-    isOpen: true,
-    isFeatured: false,
-    offerText: null,
-    tags: ['Spices', 'Pulses', 'Oils'],
-    emoji: '🌶️',
-    bgColor: 'from-red-400 to-red-600',
-  },
-  {
-    id: 'shop-007',
-    name: 'Naturals Ice Cream',
-    category: 'Ice Cream & Desserts',
-    rating: 4.9,
-    reviewCount: 521,
-    distance: '2.6 km',
-    deliveryTime: '25–35 min',
-    deliveryFee: 25,
-    minOrder: 99,
-    isOpen: true,
-    isFeatured: true,
-    offerText: 'Free cone on orders ₹199+',
-    tags: ['Ice Cream', 'Shakes', 'Desserts'],
-    emoji: '🍦',
-    bgColor: 'from-teal-400 to-cyan-500',
-  },
-  {
-    id: 'shop-008',
-    name: 'HomeStyle Tiffin',
-    category: 'Home Food',
-    rating: 4.6,
-    reviewCount: 203,
-    distance: '3.1 km',
-    deliveryTime: '40–55 min',
-    deliveryFee: 30,
-    minOrder: 120,
-    isOpen: false,
-    isFeatured: false,
-    offerText: null,
-    tags: ['Tiffin', 'Lunch', 'South Indian'],
-    emoji: '🍛',
-    bgColor: 'from-yellow-400 to-amber-500',
-  },
-];
+
 
 type FilterType = 'all' | 'open' | 'fast' | 'free-delivery';
 
@@ -151,14 +14,12 @@ interface Props {
 
 export default function ShopsGrid({ onAddToCart }: Props) {
   const [filter, setFilter] = useState<FilterType>('all');
-  const [selectedShop, setSelectedShop] = useState<typeof shops[0] | null>(null);
+  const [shops, setShops] = useState<any[]>([]);
 
   const filteredShops = shops.filter(shop => {
-    if (filter === 'open') return shop.isOpen;
-    if (filter === 'fast') return parseInt(shop.deliveryTime) <= 25;
-    if (filter === 'free-delivery') return shop.deliveryFee === 0;
-    return true;
-  });
+  if (filter === 'open') return shop.is_online;
+  return true;
+});
 
   const filters: { key: FilterType; label: string }[] = [
     { key: 'all', label: 'All Shops' },
@@ -167,6 +28,20 @@ export default function ShopsGrid({ onAddToCart }: Props) {
     { key: 'free-delivery', label: '🆓 Free Delivery' },
   ];
 
+useEffect(() => {
+  const fetchShops = async () => {
+    const { data, error } = await supabase
+      .from('sellers')
+      .select('*')
+      .eq('is_online', true); // 🔥 THIS IS YOUR STEP 2
+
+    if (!error && data) {
+      setShops(data);
+    }
+  };
+
+  fetchShops();
+}, []);
   return (
     <section className="px-4 lg:px-8 mt-8">
       <div className="flex items-center justify-between mb-4">
@@ -201,19 +76,22 @@ export default function ShopsGrid({ onAddToCart }: Props) {
         {filteredShops.map(shop => (
           <button
             key={shop.id}
-            onClick={() => setSelectedShop(shop)}
+            onClick={() => {
+            console.log("CLICKED SHOP ID:", shop.id);
+            window.location.href = `/shop/${shop.id}`;
+            }}
             className="bg-white rounded-2xl border border-stone-200 shadow-card hover:shadow-card-hover transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] text-left overflow-hidden group"
           >
             {/* Shop banner */}
-            <div className={`relative h-28 bg-gradient-to-br ${shop.bgColor} flex items-center justify-center overflow-hidden`}>
-              <span className="text-5xl opacity-80">{shop.emoji}</span>
+            <div className={`relative h-28 bg-gradient-to-br ${shop.bgColor || 'bg-gray-100'} flex items-center justify-center overflow-hidden`}>
+              <span className="text-5xl opacity-80">{shop.emoji || '🏪'}</span>
               {shop.isFeatured && (
                 <span className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 bg-white/90 text-orange-600 text-[10px] font-display font-700 rounded-full">
                   <Zap size={9} className="fill-orange-500" />
                   Featured
                 </span>
               )}
-              {!shop.isOpen && (
+              {!shop.is_online && (
                 <div className="absolute inset-0 bg-stone-900/50 flex items-center justify-center">
                   <span className="text-white text-sm font-display font-700 bg-stone-800/80 px-3 py-1 rounded-full">Closed</span>
                 </div>
@@ -223,7 +101,7 @@ export default function ShopsGrid({ onAddToCart }: Props) {
             <div className="p-3.5">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h3 className="font-display font-700 text-sm text-stone-800 line-clamp-1">{shop.name}</h3>
+                  <h3 className="font-display font-700 text-sm text-stone-800 line-clamp-1">{shop.shop_name}</h3>
                   <p className="text-xs text-stone-500 font-body mt-0.5">{shop.category}</p>
                 </div>
                 <ChevronRight size={14} className="text-stone-400 flex-shrink-0 mt-0.5 group-hover:text-orange-500 transition-colors" />
@@ -231,7 +109,7 @@ export default function ShopsGrid({ onAddToCart }: Props) {
 
               {/* Tags */}
               <div className="flex gap-1 mt-2 flex-wrap">
-                {shop.tags.slice(0, 2).map(tag => (
+                {(shop.tags || []).slice(0, 2).map((tag: string) => (
                   <span key={`${shop.id}-tag-${tag}`} className="px-1.5 py-0.5 bg-stone-100 text-stone-500 text-[10px] font-body rounded-md">
                     {tag}
                   </span>
@@ -242,16 +120,16 @@ export default function ShopsGrid({ onAddToCart }: Props) {
               <div className="flex items-center gap-3 mt-2.5">
                 <div className="flex items-center gap-0.5">
                   <Star size={11} className="text-amber-400 fill-amber-400" />
-                  <span className="text-xs font-display font-600 text-stone-700 tabular-nums">{shop.rating}</span>
-                  <span className="text-xs text-stone-400 font-body tabular-nums">({shop.reviewCount})</span>
+                  <span className="text-xs font-display font-600 text-stone-700 tabular-nums">{shop.rating || 4.2}</span>
+                  <span className="text-xs text-stone-400 font-body tabular-nums">({shop.reviewCount || 20})</span>
                 </div>
                 <div className="flex items-center gap-0.5">
                   <Clock size={11} className="text-stone-400" />
-                  <span className="text-xs text-stone-500 font-body">{shop.deliveryTime}</span>
+                  <span className="text-xs text-stone-500 font-body">{shop.delivery_time || '20-30 min'}</span>
                 </div>
                 <div className="flex items-center gap-0.5">
                   <MapPin size={11} className="text-stone-400" />
-                  <span className="text-xs text-stone-500 font-body">{shop.distance}</span>
+                  <span className="text-xs text-stone-500 font-body">{shop.distance || '2 km'}</span>
                 </div>
               </div>
 
@@ -268,10 +146,10 @@ export default function ShopsGrid({ onAddToCart }: Props) {
                   {shop.deliveryFee === 0 ? (
                     <span className="text-green-600 font-display font-600">Free delivery</span>
                   ) : (
-                    <>₹{shop.deliveryFee} delivery</>
+                    <>₹{shop.deliveryFee ?? 20} delivery</>
                   )}
                 </span>
-                <span className="text-xs text-stone-400 font-body">Min ₹{shop.minOrder}</span>
+                <span className="text-xs text-stone-400 font-body">Min ₹{shop.minOrder || 100}</span>
               </div>
             </div>
           </button>
@@ -290,15 +168,6 @@ export default function ShopsGrid({ onAddToCart }: Props) {
             Show All Shops
           </button>
         </div>
-      )}
-
-      {/* Shop detail modal */}
-      {selectedShop && (
-        <ShopDetailModal
-          shop={selectedShop}
-          onClose={() => setSelectedShop(null)}
-          onAddToCart={onAddToCart}
-        />
       )}
     </section>
   );
