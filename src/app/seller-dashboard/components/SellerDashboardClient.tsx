@@ -10,100 +10,93 @@ import SellerSalesChart from './SellerSalesChart';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import SellerWallet from './SellerWallet';
+import Link from 'next/link';
 
+export default function SellerDashboardClient({ activeTab }: any) {
 
-export default function SellerDashboardClient() {
   const [shopOnline, setShopOnline] = useState(true);
-
-  // ✅ NEW: Orders state
   const [orders, setOrders] = useState<any[]>([]);
+  const [prevOrderIds, setPrevOrderIds] = useState<string[]>([]);
 
-const [prevOrderIds, setPrevOrderIds] = useState<string[]>([]);
+  useEffect(() => {
+    const fetchOrders = async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          order_items (*)
+        `)
+        .order('created_at', { ascending: false });
 
-useEffect(() => {
-  const fetchOrders = async () => {
-    const { data, error } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        order_items (*)
-      `)
-      .order('created_at', { ascending: false });
+      if (!error && data) {
+        const currentIds = data.map((o) => o.id);
 
-    if (!error && data) {
-  const currentIds = data.map((o) => o.id);
+        const hasNewOrder = currentIds.some(
+          (id) => !prevOrderIds.includes(id)
+        );
 
-  const hasNewOrder = currentIds.some(
-    (id) => !prevOrderIds.includes(id)
-  );
+        if (prevOrderIds.length > 0 && hasNewOrder) {
+          toast.success('New order received 🔥');
 
-  if (prevOrderIds.length > 0 && hasNewOrder) {
-    toast.success('New order received 🔥');
+          const audio = new Audio('/notification.mp3');
+          audio.play().catch(() => {});
+        }
 
-    const audio = new Audio('/notification.mp3');
-    audio.play().catch(() => {});
-  }
+        setPrevOrderIds(currentIds);
+        setOrders(data);
+      }
+    };
 
-  setPrevOrderIds(currentIds);
-  setOrders(data);
-}
-  };
+    fetchOrders();
 
-  fetchOrders();
+    const channel = supabase
+      .channel('seller-orders')
 
-const channel = supabase
-  .channel('seller-orders')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'orders',
+        },
+        () => {
+          fetchOrders();
+        }
+      )
 
-  // 🆕 NEW ORDER
-  .on(
-    'postgres_changes',
-    {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'orders',
-    },
-    (payload) => {
-      console.log('🆕 New order:', payload);
-      fetchOrders();
-    }
-  )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+        },
+        () => {
+          fetchOrders();
+        }
+      )
 
-  // 🔄 STATUS UPDATE (THIS WAS WRONG BEFORE)
-  .on(
-    'postgres_changes',
-    {
-      event: 'UPDATE', // ✅ FIXED
-      schema: 'public',
-      table: 'orders',
-    },
-    (payload) => {
-      console.log('🔄 Order updated:', payload);
-      fetchOrders();
-    }
-  )
+      .subscribe();
 
-  .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [prevOrderIds]);
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, []);
+  useEffect(() => {
+    const unlockAudio = () => {
+      const audio = new Audio('/notification.mp3');
+      audio.play().catch(() => {});
+      document.removeEventListener('click', unlockAudio);
+    };
 
-useEffect(() => {
-  const unlockAudio = () => {
-    const audio = new Audio('/notification.mp3');
-    audio.play().catch(() => {});
-    document.removeEventListener('click', unlockAudio);
-  };
+    document.addEventListener('click', unlockAudio);
 
-  document.addEventListener('click', unlockAudio);
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+    };
+  }, []);
 
-  return () => {
-    document.removeEventListener('click', unlockAudio);
-  };
-}, []);
-
-  // ✅ Filter orders for this seller
   const sellerOrders = orders;
 
   return (
@@ -117,33 +110,59 @@ useEffect(() => {
 
       <div className="px-4 lg:px-8 2xl:px-12 pb-8 max-w-screen-2xl mx-auto">
         
-         {/* 🔥 ADD WALLET HERE */}
-  <div className="mb-6">
-    <SellerWallet />
-  </div>
-  
-        {/* KPI cards */}
-        <SellerKPICards />
-
-        {/* Main content grid */}
-        <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 2xl:grid-cols-3 gap-6">
-          
-          {/* Orders table */}
-          <div className="xl:col-span-2">
-            {/* ✅ PASS REAL DATA HERE */}
-            <SellerOrdersTable 
-  orders={sellerOrders} 
-  setOrders={setOrders}
-/>
-          </div>
-
-          {/* Right panel */}
-          <div className="space-y-6">
-            <SellerSalesChart />
-            <SellerProductPanel />
-          </div>
-
+        {/* WALLET */}
+        <div className="mb-6">
+          <SellerWallet />
         </div>
+
+        {/* ================= DASHBOARD ================= */}
+        {activeTab === 'dashboard' && (
+          <>
+            <SellerKPICards />
+
+            <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 2xl:grid-cols-3 gap-6">
+              
+              <div className="xl:col-span-2">
+                <SellerOrdersTable 
+                  orders={sellerOrders} 
+                  setOrders={setOrders}
+                />
+              </div>
+
+              <div className="space-y-6">
+                <SellerSalesChart />
+                <SellerProductPanel />
+              </div>
+
+            </div>
+          </>
+        )}
+
+        {/* ================= ORDERS ================= */}
+        {activeTab === 'orders' && (
+          <SellerOrdersTable 
+            orders={sellerOrders} 
+            setOrders={setOrders}
+          />
+        )}
+
+        {/* ================= PRODUCTS ================= */}
+        {activeTab === 'products' && (
+          <SellerProductPanel />
+        )}
+
+        {/* ================= ANALYTICS ================= */}
+        {activeTab === 'analytics' && (
+          <SellerSalesChart />
+        )}
+
+        {/* ================= SETTINGS ================= */}
+        {activeTab === 'settings' && (
+          <div className="p-6 bg-white rounded-xl shadow">
+            Settings coming soon ⚙️
+          </div>
+        )}
+
       </div>
     </>
   );

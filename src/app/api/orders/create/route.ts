@@ -86,7 +86,7 @@ export async function POST(req: Request) {
         delivery_mode,
         item_count,
         area,
-        instructions, // ✅ NEW
+        instructions,
 
         status: 'pending',
         delivery_status: 'pending',
