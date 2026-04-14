@@ -41,16 +41,14 @@ export const CartProvider = ({ children }: any) => {
     localStorage.setItem('cart', JSON.stringify(items));
   }, [items]);
 
+  // ✅ CLEAN & SCALABLE ADD LOGIC
   const addItem = (item: Omit<CartItem, 'qty'>) => {
-    const existingShop = items[0]?.shopId;
-
-    // 🔥 SINGLE SHOP RULE
-    if (existingShop && existingShop !== item.shopId) {
-      alert('You can only order from one shop at a time');
-      return;
-    }
-
     setItems(prev => {
+      // 🔥 SINGLE SHOP RULE (Swiggy-style reset)
+      if (prev.length > 0 && prev[0].shopId !== item.shopId) {
+        return [{ ...item, qty: 1 }];
+      }
+
       const existing = prev.find(i => i.id === item.id);
 
       if (existing) {
