@@ -1,14 +1,19 @@
 import React from 'react';
 import Icon from '@/components/ui/AppIcon';
 
-export default function SearchBar() {
+interface Props {
+  value: string;
+  onChange: (val: string) => void;
+}
+
+export default function SearchBar({ value, onChange }: Props) {
   return (
-    <div className="px-4 py-3">
-  <input
-    type="text"
-    placeholder="Search for items..."
-    className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm outline-none"
-  />
-</div>
+    <input
+      type="text"
+      placeholder="Search items..."
+      className="w-full p-3 outline-none"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }

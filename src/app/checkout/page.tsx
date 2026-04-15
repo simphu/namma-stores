@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 
 
+
 interface CartItem {
   id: string;
   name: string;
