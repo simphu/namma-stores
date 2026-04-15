@@ -113,13 +113,14 @@ function OrderCard({ order, onCancel }: { order: Order; onCancel: (id: string) =
   />
 
   <div className="flex-1">
-    <p className="text-sm font-medium text-stone-800">
-      {order.items?.[0]?.name || "Item"}
-    </p>
-    <p className="text-xs text-stone-400">
-      {order.items.length} item{order.items.length !== 1 ? 's' : ''}
-    </p>
+  <div className="space-y-1">
+    {order.items?.map((item) => (
+      <p key={item.id} className="text-sm text-stone-800">
+        {item.name} × {item.qty}
+      </p>
+    ))}
   </div>
+</div>
 
   <p className="font-bold text-stone-800">
     ₹{order.total.toFixed(2)}

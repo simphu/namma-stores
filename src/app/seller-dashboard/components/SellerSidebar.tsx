@@ -1,26 +1,25 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import React from 'react';
 import { LayoutDashboard, Package, Box, BarChart3, Settings } from 'lucide-react';
 
-export default function SellerSidebar({ activeTab, setActiveTab, orderCount }: any) {
+interface Props {
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  orderCount: number;
 
-  const [isOnline, setIsOnline] = useState(true);
+  // 🔥 NEW PROPS
+  isAcceptingOrders: boolean;
+  onToggleAccepting: () => void;
+}
 
-useEffect(() => {
-  const fetchStatus = async () => {
-    const { data } = await supabase
-      .from('sellers')
-      .select('is_online')
-      .eq('id', 'seller_1')
-      .single();
-
-    if (data) setIsOnline(data.is_online);
-  };
-
-  fetchStatus();
-}, []);
+export default function SellerSidebar({
+  activeTab,
+  setActiveTab,
+  orderCount,
+  isAcceptingOrders,
+  onToggleAccepting,
+}: Props) {
 
   // ✅ MENU CONFIG
   const menu = [
@@ -45,19 +44,27 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* SHOP STATUS */}
+        {/* 🔥 ACCEPT ORDERS TOGGLE */}
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex justify-between items-center mb-5">
           <div>
-            <p className="text-green-700 font-medium">Shop Online</p>
-            <p className="text-xs text-gray-500">Accepting orders</p>
+            <p className="text-green-700 font-medium">Accept Orders</p>
+            <p className="text-xs text-gray-500">
+              {isAcceptingOrders ? 'Receiving orders' : 'Paused'}
+            </p>
           </div>
 
           <button
-            onClick={() => setIsOnline(!isOnline)}
-            className={`w-10 h-5 rounded-full transition ${
-              isOnline ? "bg-green-500" : "bg-gray-300"
+            onClick={onToggleAccepting}
+            className={`relative w-10 h-5 rounded-full transition ${
+              isAcceptingOrders ? "bg-green-500" : "bg-gray-300"
             }`}
-          />
+          >
+            <div
+              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition ${
+                isAcceptingOrders ? "left-5" : "left-0.5"
+              }`}
+            />
+          </button>
         </div>
 
         {/* MENU */}

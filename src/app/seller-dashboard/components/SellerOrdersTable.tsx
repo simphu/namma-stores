@@ -163,11 +163,13 @@ export default function SellerOrdersTable({ orders, setOrders }: Props) {
 
                   {/* ITEM */}
 {Array.isArray(order.order_items) && order.order_items.length > 0 && (
-  <p className="font-semibold mt-1">
-    {order.order_items[0]?.name} × {order.order_items[0]?.qty}
-    {order.order_items.length > 1 &&
-      ` +${order.order_items.length - 1} more`}
-  </p>
+  <div className="mt-1 space-y-1">
+    {order.order_items.map((item, index) => (
+      <p key={index} className="text-sm font-medium text-stone-800">
+        {item.name} × {item.qty}
+      </p>
+    ))}
+  </div>
 )}
 
                   {/* NOTE */}

@@ -11,12 +11,57 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import SellerWallet from './SellerWallet';
 import Link from 'next/link';
+import SellerSidebar from './SellerSidebar';
 
-export default function SellerDashboardClient({ activeTab, setOrderCount }: any) {
+export default function SellerDashboardClient({ activeTab, setActiveTab, setOrderCount }: any) {
 
-  const [shopOnline, setShopOnline] = useState(true);
+  const [isOpen, setIsOpen] = useState<boolean | null>(null);
+  const [isAcceptingOrders, setIsAcceptingOrders] = useState<boolean | null>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [prevOrderIds, setPrevOrderIds] = useState<string[]>([]);
+
+  useEffect(() => {
+  const fetchShopStatus = async () => {
+    const { data } = await supabase
+      .from('sellers')
+      .select('is_open, is_accepting_orders')
+      .eq('id', 'seller_1')
+      .single();
+
+    if (data) {
+      setIsOpen(data.is_open);
+      setIsAcceptingOrders(data.is_accepting_orders);
+    }
+  };
+
+  fetchShopStatus();
+}, []);
+
+useEffect(() => {
+  const channel = supabase
+    .channel('seller-self')
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'sellers',
+        filter: 'id=eq.seller_1',
+      },
+      (payload) => {
+        console.log('SELF UPDATE:', payload);
+
+        // 🔥 instant sync with DB
+        setIsOpen(payload.new.is_open);
+        setIsAcceptingOrders(payload.new.is_accepting_orders);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, []);
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -102,14 +147,56 @@ export default function SellerDashboardClient({ activeTab, setOrderCount }: any)
   }, []);
 
   const sellerOrders = orders;
+  const toggleOpen = async () => {
+  if (isOpen === null) return;
+
+  const newOpen = !isOpen;
+  const newAccepting = newOpen ? true : false; // 🔥 always sync
+
+  setIsOpen(newOpen);
+  setIsAcceptingOrders(newAccepting);
+
+  const { data, error } = await supabase
+    .from('sellers')
+    .update({
+      is_open: newOpen,
+      is_accepting_orders: newAccepting,
+    })
+    .eq('id', 'seller_1')
+    .select();
+
+  console.log("UPDATE RESULT:", data, error);
+};
+
+const toggleAccepting = async () => {
+  if (isAcceptingOrders === null || !isOpen) return;
+
+  const newStatus = !isAcceptingOrders;
+
+  setIsAcceptingOrders(newStatus);
+
+  const { data, error } = await supabase
+    .from('sellers')
+    .update({ is_accepting_orders: newStatus })
+    .eq('id', 'seller_1')
+    .select();
+
+  console.log("ACCEPTING UPDATE:", data, error);
+};
 
   return (
-    <>
+  <div className="flex h-screen">
+
+    {/* ✅ MAIN CONTENT */}
+    <div className="flex-1 overflow-y-auto">
+
       <Toaster position="top-right" richColors />
 
       <SellerTopbar
-        shopOnline={shopOnline}
-        onToggleShop={() => setShopOnline((p) => !p)}
+        isOpen={isOpen ?? false}
+        isAcceptingOrders={isAcceptingOrders ?? false}
+        onToggleOpen={toggleOpen}
+        onToggleAccepting={toggleAccepting}
       />
 
       <div className="px-4 lg:px-8 2xl:px-12 pb-8 max-w-screen-2xl mx-auto">
@@ -119,16 +206,16 @@ export default function SellerDashboardClient({ activeTab, setOrderCount }: any)
           <SellerWallet />
         </div>
 
-        {/* ================= DASHBOARD ================= */}
+        {/* DASHBOARD */}
         {activeTab === 'dashboard' && (
           <>
             <SellerKPICards />
 
-            <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 2xl:grid-cols-3 gap-6">
+            <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 gap-6">
               
               <div className="xl:col-span-2">
                 <SellerOrdersTable 
-                  orders={sellerOrders} 
+                  orders={orders} 
                   setOrders={setOrders}
                 />
               </div>
@@ -142,25 +229,21 @@ export default function SellerDashboardClient({ activeTab, setOrderCount }: any)
           </>
         )}
 
-        {/* ================= ORDERS ================= */}
+        {/* ORDERS */}
         {activeTab === 'orders' && (
           <SellerOrdersTable 
-            orders={sellerOrders} 
+            orders={orders} 
             setOrders={setOrders}
           />
         )}
 
-        {/* ================= PRODUCTS ================= */}
-        {activeTab === 'products' && (
-          <SellerProductPanel />
-        )}
+        {/* PRODUCTS */}
+        {activeTab === 'products' && <SellerProductPanel />}
 
-        {/* ================= ANALYTICS ================= */}
-        {activeTab === 'analytics' && (
-          <SellerSalesChart />
-        )}
+        {/* ANALYTICS */}
+        {activeTab === 'analytics' && <SellerSalesChart />}
 
-        {/* ================= SETTINGS ================= */}
+        {/* SETTINGS */}
         {activeTab === 'settings' && (
           <div className="p-6 bg-white rounded-xl shadow">
             Settings coming soon ⚙️
@@ -168,6 +251,8 @@ export default function SellerDashboardClient({ activeTab, setOrderCount }: any)
         )}
 
       </div>
-    </>
-  );
+    </div>
+
+  </div>
+);
 }

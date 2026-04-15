@@ -7,9 +7,17 @@ interface Props {
   products: any[];
   shopId: string;
   shopName: string;
+  isAcceptingOrders: boolean;
+  isOpen: boolean; // ✅ shop status
 }
 
-export default function MenuCategories({ products, shopId, shopName }: Props) {
+export default function MenuCategories({
+  products,
+  shopId,
+  shopName,
+  isAcceptingOrders,
+  isOpen, // ✅ RECEIVE FROM PARENT
+}: Props) {
 
   // 🔥 GROUP BY CATEGORY
   const grouped = products.reduce((acc: any, product: any) => {
@@ -23,22 +31,22 @@ export default function MenuCategories({ products, shopId, shopName }: Props) {
 
   const categories = Object.keys(grouped);
 
-  // 🔥 STATE: which category is open
+  // 🔥 CATEGORY UI STATE (NOT SHOP STATE)
   const [openCategory, setOpenCategory] = useState(categories[0]);
 
   return (
     <div className="px-4 py-3 pb-40">
 
       {categories.map((cat) => {
-        const isOpen = openCategory === cat;
+        const isCategoryOpen = openCategory === cat; // ✅ FIXED NAME
 
         return (
           <div key={cat} className="mb-4 border rounded-xl overflow-hidden">
 
-            {/* 🔥 CATEGORY HEADER */}
+            {/* CATEGORY HEADER */}
             <button
               onClick={() =>
-                setOpenCategory(isOpen ? '' : cat)
+                setOpenCategory(isCategoryOpen ? '' : cat)
               }
               className="w-full flex justify-between items-center px-4 py-3 bg-gray-50"
             >
@@ -47,12 +55,12 @@ export default function MenuCategories({ products, shopId, shopName }: Props) {
               </span>
 
               <span className="text-sm">
-                {isOpen ? '▲' : '▼'}
+                {isCategoryOpen ? '▲' : '▼'}
               </span>
             </button>
 
-            {/* 🔥 PRODUCTS */}
-            {isOpen && (
+            {/* PRODUCTS */}
+            {isCategoryOpen && (
               <div className="divide-y">
                 {grouped[cat].map((p: any) => (
                   <ProductRow
@@ -71,6 +79,10 @@ export default function MenuCategories({ products, shopId, shopName }: Props) {
                     }}
                     shopId={shopId}
                     shopName={shopName}
+
+                    // ✅ REAL SHOP STATUS (IMPORTANT)
+                    isAcceptingOrders={isAcceptingOrders}
+                    isOpen={isOpen}
                   />
                 ))}
               </div>
