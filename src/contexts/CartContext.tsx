@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 type CartItem = {
   id: string;
@@ -13,10 +14,10 @@ type CartItem = {
 
 type CartContextType = {
   items: CartItem[];
-  addItem: (item: Omit<CartItem, 'qty'>) => void;
-  removeItem: (id: string) => void;
-  updateQty: (id: string, qty: number) => void;
-  clearCart: () => void;
+  addItem: (item: Omit<CartItem, 'qty'>) => Promise<void>;
+  removeItem: (id: string) => Promise<void>;
+  updateQty: (id: string, qty: number) => Promise<void>;
+  clearCart: () => Promise<void>;
 };
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -30,50 +31,85 @@ export const useCart = () => {
 export const CartProvider = ({ children }: any) => {
   const [items, setItems] = useState<CartItem[]>([]);
 
-  // ✅ Load from localStorage
+  // ✅ LOAD CART FROM DB
+  const fetchCart = async () => {
+    const { data, error } = await supabase.from('cart').select('*');
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    const formatted = data.map((item) => ({
+      id: item.product_id,
+      name: item.product_name,
+      price: item.price,
+      qty: item.quantity,
+      shopId: item.seller_id,
+      shopName: item.shop_name || 'Store',
+    }));
+
+    setItems(formatted);
+  };
+
   useEffect(() => {
-    const stored = localStorage.getItem('cart');
-    if (stored) setItems(JSON.parse(stored));
+    fetchCart();
   }, []);
 
-  // ✅ Save to localStorage
-  useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(items));
-  }, [items]);
+  // ✅ ADD ITEM (DB FIRST)
+  const addItem = async (item: Omit<CartItem, 'qty'>) => {
+    // 🔥 CHECK EXISTING
+    const { data: existing } = await supabase
+      .from('cart')
+      .select('*')
+      .eq('product_id', item.id)
+      .single();
 
-  // ✅ CLEAN & SCALABLE ADD LOGIC
-  const addItem = (item: Omit<CartItem, 'qty'>) => {
-    setItems(prev => {
-      // 🔥 SINGLE SHOP RULE (Swiggy-style reset)
-      if (prev.length > 0 && prev[0].shopId !== item.shopId) {
-        return [{ ...item, qty: 1 }];
-      }
+    if (existing) {
+      await supabase
+        .from('cart')
+        .update({ quantity: existing.quantity + 1 })
+        .eq('product_id', item.id);
+    } else {
+      await supabase.from('cart').insert({
+        product_id: item.id,
+        product_name: item.name,
+        price: item.price,
+        quantity: 1,
+        seller_id: item.shopId,
+        shop_name: item.shopName,
+      });
+    }
 
-      const existing = prev.find(i => i.id === item.id);
-
-      if (existing) {
-        return prev.map(i =>
-          i.id === item.id ? { ...i, qty: i.qty + 1 } : i
-        );
-      }
-
-      return [...prev, { ...item, qty: 1 }];
-    });
+    await fetchCart();
   };
 
-  const removeItem = (id: string) => {
-    setItems(prev => prev.filter(i => i.id !== id));
+  // ✅ REMOVE ITEM
+  const removeItem = async (id: string) => {
+    await supabase.from('cart').delete().eq('product_id', id);
+    await fetchCart();
   };
 
-  const updateQty = (id: string, qty: number) => {
-    if (qty <= 0) return removeItem(id);
+  // ✅ UPDATE QTY
+  const updateQty = async (id: string, qty: number) => {
+    if (qty <= 0) {
+      await removeItem(id);
+      return;
+    }
 
-    setItems(prev =>
-      prev.map(i => (i.id === id ? { ...i, qty } : i))
-    );
+    await supabase
+      .from('cart')
+      .update({ quantity: qty })
+      .eq('product_id', id);
+
+    await fetchCart();
   };
 
-  const clearCart = () => setItems([]);
+  // ✅ CLEAR CART
+  const clearCart = async () => {
+    await supabase.from('cart').delete();
+    setItems([]);
+  };
 
   return (
     <CartContext.Provider

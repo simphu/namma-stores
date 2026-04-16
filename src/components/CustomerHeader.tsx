@@ -2,15 +2,22 @@
 import React, { useState } from 'react';
 import AppLogo from '@/components/ui/AppLogo';
 import { MapPin, Search, Bell, ChevronDown, X } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+
+type Address = {
+  id: string;
+  label: string;
+  address: string;
+};
 
 interface CustomerHeaderProps {
   cartCount?: number;
   onCartOpen?: () => void;
 
-  addresses: any[];
-  selectedAddress: any;
-  setSelectedAddress: (addr: any) => void;
-  setAddresses: (addr: any[]) => void;
+  addresses: Address[];
+  selectedAddress: Address | null;
+  setSelectedAddress: (addr: Address) => void;
+  setAddresses: React.Dispatch<React.SetStateAction<Address[]>>;
   products: any[];
 }
 
@@ -162,29 +169,39 @@ export default function CustomerHeader({
 
   {/* ✅ ADD NEW ADDRESS */}
   <button
-    onClick={() => {
-      const label = prompt("Enter label (Home / Work)");
-      const address = prompt("Enter full address");
+  onClick={async () => {
+    const label = prompt("Enter label (Home / Work)");
+    const address = prompt("Enter full address");
 
-      if (!address) return;
+    if (!address) return;
 
-      const newAddress = {
-        id: Date.now(),
-        label: label || "New Address",
-        address,
-      };
+    const { data, error } = await supabase
+      .from('addresses')
+      .insert([
+        {
+          user_id: 'user_1',
+          label: label || 'New Address',
+          address: address,
+        }
+      ])
+      .select()
+      .single();
 
-      const updated = [...addresses, newAddress];
+    if (error) {
+      console.error(error);
+      alert("Failed to save address");
+      return;
+    }
 
-      setAddresses(updated);
-      setSelectedAddress(newAddress);
-      setLocationModalOpen(false);
-      localStorage.setItem("namma_addresses", JSON.stringify(updated));
-    }}
-    className="w-full mt-2 border-dashed border p-3 rounded-xl text-sm text-stone-600 hover:bg-stone-50"
-    >
-    + Add new address
-  </button>
+    // ✅ Update UI instantly
+    setAddresses((prev: Address[]) => [...prev, data]);
+    setSelectedAddress(data);
+    setLocationModalOpen(false);
+  }}
+  className="w-full mt-2 border-dashed border p-3 rounded-xl text-sm text-stone-600 hover:bg-stone-50"
+>
+  + Add new address
+</button>
 </div>
           </div>
         </div>

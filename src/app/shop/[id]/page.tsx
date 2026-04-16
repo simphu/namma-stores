@@ -96,7 +96,7 @@ export default function ShopPage() {
           </div>
         )}
 
-        <DealsSection />
+        <DealsSection sellerId={sellerId as string} />
 
         <SearchBar value={search} onChange={setSearch} />
         <FilterBar value={filter} onChange={setFilter} />

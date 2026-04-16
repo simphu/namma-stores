@@ -46,17 +46,17 @@ export default function ShopHeader({ shop }: Props) {
           <div className="flex items-center flex-wrap gap-3 mt-2.5">
             <span className="flex items-center gap-1 bg-green-600 text-white text-xs px-2.5 py-1 rounded-full">
               <Icon name="StarIcon" size={11} className="text-white" />
-              {shop?.rating || 4.2}
+              {shop?.rating ?? '—'}
             </span>
 
             <span className="flex items-center gap-1 text-white/90 text-xs">
               <Icon name="ClockIcon" size={13} className="text-orange-400" />
-              {shop?.delivery_time || '20–30 mins'}
+              {shop?.delivery_time ?? 'N/A'}
             </span>
 
             <span className="flex items-center gap-1 text-white/90 text-xs">
               <Icon name="MapPinIcon" size={13} className="text-orange-400" />
-              {shop?.location || 'Nearby'}
+              {shop?.location ?? 'N/A'}
             </span>
           </div>
         </div>

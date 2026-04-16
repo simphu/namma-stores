@@ -1,13 +1,33 @@
-import React from 'react';
+'use client';
+
+import React, { useEffect, useState } from 'react';
 import Icon from '@/components/ui/AppIcon';
+import { supabase } from '@/lib/supabase';
 
-const deals = [
-  { id: 1, title: '₹50 OFF', code: 'SAVE50' },
-  { id: 2, title: 'Free Delivery', code: 'FREEDEL' },
-  { id: 3, title: '20% OFF', code: 'NAMMA20' },
-];
+interface Props {
+  sellerId: string;
+}
 
-export default function DealsSection() {
+export default function DealsSection({ sellerId }: Props) {
+  const [deals, setDeals] = useState<any[]>([]);
+
+  // 🔥 FETCH OFFERS
+  useEffect(() => {
+    const fetchDeals = async () => {
+      const { data } = await supabase
+        .from('offers')
+        .select('*')
+        .eq('seller_id', sellerId)
+        .eq('is_active', true);
+
+      setDeals(data || []);
+    };
+
+    if (sellerId) fetchDeals();
+  }, [sellerId]);
+
+  if (!deals.length) return null;
+
   return (
     <div className="bg-white border-b px-4 py-3">
       <div className="flex gap-3 overflow-x-auto scrollbar-hide">

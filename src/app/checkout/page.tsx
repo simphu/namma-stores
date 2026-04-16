@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, MapPin, Bike, Store, MessageSquare, CreditCard, Wallet, ChevronRight, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 
 
 
@@ -34,37 +35,68 @@ export default function CheckoutPage() {
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cod');
   const [instructions, setInstructions] = useState('');
   const [placing, setPlacing] = useState(false);
+  
 
 useEffect(() => {
-  try {
-    // Load cart
-    const storedCart = localStorage.getItem('checkout_cart');
-    if (storedCart) {
-      setItems(JSON.parse(storedCart));
+  const fetchCart = async () => {
+    const { data, error } = await supabase
+      .from('cart')
+      .select('*');
+
+    if (error) {
+      console.error(error);
+      setItems([]);
+      return;
     }
 
-    // Load addresses
-    const storedAddresses = localStorage.getItem(ADDRESS_KEY);
-    const parsed = storedAddresses ? JSON.parse(storedAddresses) : [];
+    // 🔥 MAP DB → UI FORMAT
+    const formatted = (data || []).map((item) => ({
+      id: item.product_id,
+      name: item.product_name,
+      price: item.price,
+      qty: item.quantity,
+      shopId: item.seller_id,
+      shopName: item.shop_name || 'Store',
+    }));
 
-    setAddresses(parsed);
+    setItems(formatted);
+  };
 
-    if (parsed.length > 0) {
-      setSelectedAddress(parsed[0].id);
-    }
-
-  } catch {
-    setItems([]);
-    setAddresses([]);
-  }
-
+  fetchCart();
+  fetchAddresses();
   setLoaded(true);
 }, []);
-  const ADDRESS_KEY = "namma_addresses";
 
-const [addresses, setAddresses] = useState<any[]>([]);
-const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+const updateQty = async (productId: string, newQty: number) => {
+  if (newQty <= 0) {
+    await supabase
+      .from('cart')
+      .delete()
+      .eq('product_id', productId);
+  } else {
+    await supabase
+      .from('cart')
+      .update({ quantity: newQty })
+      .eq('product_id', productId);
+  }
 
+  // 🔥 REFRESH
+  const { data } = await supabase.from('cart').select('*');
+
+  const formatted = (data || []).map((item) => ({
+    id: item.product_id,
+    name: item.product_name,
+    price: item.price,
+    qty: item.quantity,
+    shopId: item.seller_id,
+    shopName: item.shop_name || 'Store',
+  }));
+
+  setItems(formatted);
+};
+
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
   const totalItems = items.reduce((s, i) => s + i.qty, 0);
   const deliveryFee = deliveryMode === 'delivery' ? (subtotal > 299 ? 0 : 25) : 0;
@@ -72,24 +104,50 @@ const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const selectedAddr = addresses.find(a => a.id === selectedAddress);
 
 
-const handleAddAddress = () => {
-  const label = prompt("Enter address name (Home, Work, etc)");
+const fetchAddresses = async () => {
+  const { data, error } = await supabase
+    .from('addresses')
+    .select('*')
+    .eq('user_id', 'user_1');
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  setAddresses(data || []);
+
+  if (data && data.length > 0) {
+    setSelectedAddress(data[0].id);
+  }
+};
+
+const handleAddAddress = async () => {
+  const label = prompt("Enter address name");
   const address = prompt("Enter full address");
 
   if (!label || !address) return;
 
-  const newAddress = {
-    id: Date.now().toString(),
-    label,
-    address,
-  };
+  const { data, error } = await supabase
+    .from('addresses')
+    .insert([
+      {
+        user_id: 'user_1',
+        label,
+        address
+      }
+    ])
+    .select()
+    .single();
 
-  const updated = [...addresses, newAddress];
+  if (error) {
+    console.error(error);
+    return;
+  }
 
-  setAddresses(updated);
-  localStorage.setItem(ADDRESS_KEY, JSON.stringify(updated));
+  setAddresses(prev => [...prev, data]);
+  setSelectedAddress(data.id);
 };
-
 
 const handlePlaceOrder = async () => {
   if (!items || items.length === 0) return;
@@ -122,8 +180,7 @@ const handlePlaceOrder = async () => {
     const data = await res.json();
 
     if (data.success) {
-      localStorage.removeItem('checkout_cart');
-      localStorage.removeItem('namma_cart');
+      await supabase.from('cart').delete();
 
       toast.success('Order placed successfully 🎉');
 
@@ -289,16 +346,46 @@ const handlePlaceOrder = async () => {
           <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-3">Order Summary</p>
           <div className="space-y-2 mb-3">
             {items.map(item => (
-              <div key={item.id} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 bg-orange-100 text-orange-600 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                    {item.qty}
-                  </span>
-                  <span className="text-sm text-stone-700">{item.name}</span>
-                </div>
-                <span className="text-sm font-semibold text-stone-700 tabular-nums">₹{(item.price * item.qty)}</span>
-              </div>
-            ))}
+  <div key={item.id} className="flex items-center justify-between">
+
+    {/* LEFT */}
+    <div className="flex items-center gap-2">
+      <span className="text-sm text-stone-700">{item.name}</span>
+    </div>
+
+    {/* RIGHT */}
+    <div className="flex items-center gap-3">
+
+      {/* 🔥 QUANTITY CONTROL */}
+      <div className="flex items-center border rounded-lg overflow-hidden">
+        <button
+          onClick={() => updateQty(item.id, item.qty - 1)}
+          className="px-2 py-1 font-bold"
+        >
+          -
+        </button>
+
+        <span className="px-3 text-sm font-bold">
+          {item.qty}
+        </span>
+
+        <button
+          onClick={() => updateQty(item.id, item.qty + 1)}
+          className="px-2 py-1 font-bold"
+        >
+          +
+        </button>
+      </div>
+
+      {/* PRICE */}
+      <span className="text-sm font-semibold w-16 text-right">
+        ₹{item.price * item.qty}
+      </span>
+
+    </div>
+
+  </div>
+))}
           </div>
           <div className="border-t border-stone-100 pt-3 space-y-2">
             <div className="flex justify-between text-sm text-stone-600">
