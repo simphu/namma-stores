@@ -1,18 +1,35 @@
 'use client';
-import React from 'react';
+
+import React, { useEffect, useState } from 'react';
 import useSWR from 'swr';
+import { supabase } from '@/lib/supabase';
 
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function SellerWallet() {
+  const [sellerId, setSellerId] = useState<string | null>(null);
 
-  const seller_id = 'seller_1'; // later dynamic
+  // ✅ 1. Get logged-in user
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: userData } = await supabase.auth.getUser();
 
+      if (!userData.user) return;
+
+      setSellerId(userData.user.id);
+    };
+
+    getUser();
+  }, []);
+
+  // ✅ 2. Fetch wallet only when sellerId exists
   const { data, isLoading } = useSWR(
-    `/api/seller/wallet?seller_id=${seller_id}`,
+    sellerId ? `/api/seller/wallet?seller_id=${sellerId}` : null,
     fetcher
   );
 
+  // ✅ 3. Loading states
+  if (!sellerId) return <div>Loading user...</div>;
   if (isLoading) return <div>Loading wallet...</div>;
 
   return (
@@ -20,7 +37,7 @@ export default function SellerWallet() {
       <h2 className="text-sm font-bold mb-3">Wallet</h2>
 
       <div className="text-3xl font-bold text-green-600">
-        ₹{data?.balance || 0}
+        ₹{data?.balance ?? 0}
       </div>
 
       <p className="text-xs text-gray-500 mt-1">

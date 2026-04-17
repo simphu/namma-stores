@@ -11,28 +11,33 @@ export default function HomepagePage() {
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
-
+  const [sellers, setSellers] = useState<any[]>([]);
   
+
   useEffect(() => {
   const loadAddresses = async () => {
-    const { data, error } = await supabase
-  .from('addresses')
-  .select('*')
-  .eq('user_id', 'user_1');
+  const { data: userData } = await supabase.auth.getUser();
 
-if (error) {
-  console.error(error);
-  return;
-}
+  if (!userData.user) return;
 
-const safeData = data || [];
+  const { data, error } = await supabase
+    .from('addresses')
+    .select('*')
+    .eq('user_id', userData.user.id);
 
-setAddresses(safeData);
+  if (error) {
+    console.error(error);
+    return;
+  }
 
-if (safeData.length > 0) {
-  setSelectedAddress(safeData[0]);
-}
-  };
+  const safeData = data || [];
+
+  setAddresses(safeData);
+
+  if (safeData.length > 0) {
+    setSelectedAddress(safeData[0]);
+  }
+};
 
   loadAddresses();
 }, []);
@@ -45,6 +50,26 @@ if (safeData.length > 0) {
 
   setProducts(dummyProducts);
 }, []);
+
+useEffect(() => {
+  const loadSellers = async () => {
+    const { data, error } = await supabase
+      .from('sellers')
+      .select('*')
+      .eq('is_onboarded', true)
+      .eq('is_open', true);
+
+    if (error) {
+      console.error('Error fetching sellers:', error);
+      return;
+    }
+
+    setSellers(data || []);
+  };
+
+  loadSellers();
+}, []);
+
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -60,6 +85,7 @@ if (safeData.length > 0) {
 <HomepageClient
   selectedAddress={selectedAddress}
   products={products}
+  sellers={sellers} // 🔥 NEW
 />
     </div>
   );

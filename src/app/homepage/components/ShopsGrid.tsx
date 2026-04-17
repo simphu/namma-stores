@@ -6,24 +6,20 @@ import type { CartItem } from './HomepageClient';
 import { supabase } from '@/lib/supabase';
 
 type FilterType = 'all' | 'open' | 'fast' | 'free-delivery';
+
 type Seller = {
   id: string;
-
-  // core
   shop_name: string;
   is_open: boolean;
   is_accepting_orders: boolean;
 
-  // optional UI fields
   rating?: number;
   delivery_time?: string;
   location?: string;
 
-  // pricing
   deliveryFee?: number;
   minOrder?: number;
 
-  // future-safe
   image?: string;
   category?: string;
 };
@@ -36,32 +32,22 @@ export default function ShopsGrid({ onAddToCart }: Props) {
   const [filter, setFilter] = useState<FilterType>('all');
   const [shops, setShops] = useState<Seller[]>([]);
 
-  // ✅ INITIAL FETCH
-  const fetchShops = async () => {
-    const { data, error } = await supabase
-      .from('sellers')
-      .select('*');
-
-    if (!error && data) {
-      setShops(data);
-    }
-  };
-
   useEffect(() => {
-  const fetchShops = async () => {
-    const { data } = await supabase
-      .from('sellers')
-      .select('*');
+    // 🔥 INITIAL FETCH
+    const fetchShops = async () => {
+      const { data } = await supabase
+        .from('sellers')
+        .select('*');
 
-    setShops(data || []);
-  };
+      setShops(data || []);
+    };
 
-  fetchShops();
+    fetchShops();
 
-  // ✅ REALTIME LISTENER
-  const channel = supabase
-    .channel('shops-realtime')
-    .on(
+    // 🔥 REALTIME CHANNEL
+    const channel = supabase.channel('shops-realtime');
+
+    channel.on(
       'postgres_changes',
       {
         event: '*',
@@ -71,33 +57,49 @@ export default function ShopsGrid({ onAddToCart }: Props) {
       (payload) => {
         console.log('SHOP UPDATE:', payload);
 
-        setShops((prev: Seller[]) => {
-  const updated = payload.new as Seller;
+        setShops((prev) => {
+          const updated = payload.new as Seller;
 
-  if (!updated || !updated.id) return prev;
+          // 🟢 INSERT
+          if (payload.eventType === 'INSERT') {
+            return [updated, ...prev];
+          }
 
-  return prev.map((shop) =>
-    shop.id === updated.id
-      ? { ...shop, ...updated }
-      : shop
-  );
-});
+          // 🟡 UPDATE
+          if (payload.eventType === 'UPDATE') {
+            return prev.map((shop) =>
+              shop.id === updated.id
+                ? { ...shop, ...updated }
+                : shop
+            );
+          }
+
+          // 🔴 DELETE
+          if (payload.eventType === 'DELETE') {
+            return prev.filter(
+              (shop) => shop.id !== (payload.old as Seller).id
+            );
+          }
+
+          return prev;
+        });
       }
-    )
-    .subscribe();
+    );
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, []);
+    channel.subscribe();
 
-  // ✅ FILTER LOGIC
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // 🔥 FILTER LOGIC
   const filteredShops = shops.filter((shop) => {
-    if (filter === 'open') return shop.is_open === true;
+    if (filter === 'open') return shop.is_open;
     return true;
   });
 
-  const filters: { key: FilterType; label: string }[] = [
+  const filters = [
     { key: 'all', label: 'All Shops' },
     { key: 'open', label: '🟢 Open Now' },
     { key: 'fast', label: '⚡ Fast Delivery' },
@@ -129,7 +131,7 @@ export default function ShopsGrid({ onAddToCart }: Props) {
         {filters.map((f) => (
           <button
             key={f.key}
-            onClick={() => setFilter(f.key)}
+            onClick={() => setFilter(f.key as FilterType)}
             className={`px-3 py-1.5 rounded-full text-xs border ${
               filter === f.key
                 ? 'bg-black text-white'
@@ -153,17 +155,14 @@ export default function ShopsGrid({ onAddToCart }: Props) {
 
             {/* IMAGE */}
             <div className="relative h-28 bg-gray-100 flex items-center justify-center">
-
               <span className="text-4xl">🏪</span>
 
-              {/* 🔴 CLOSED */}
               {!shop.is_open && (
                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                   <span className="text-white font-bold">Closed</span>
                 </div>
               )}
 
-              {/* 🟡 NOT ACCEPTING */}
               {shop.is_open && !shop.is_accepting_orders && (
                 <div className="absolute inset-0 bg-yellow-500/80 flex items-center justify-center">
                   <span className="text-white font-bold text-sm">
@@ -175,10 +174,7 @@ export default function ShopsGrid({ onAddToCart }: Props) {
 
             {/* INFO */}
             <div className="p-3">
-
-              <h3 className="font-semibold">
-                {shop.shop_name}
-              </h3>
+              <h3 className="font-semibold">{shop.shop_name}</h3>
 
               <div className="flex gap-3 text-xs mt-2 text-gray-500">
                 <span>⭐ {shop.rating || 4.2}</span>
@@ -186,7 +182,6 @@ export default function ShopsGrid({ onAddToCart }: Props) {
                 <span>📍 {shop.location || 'Nearby'}</span>
               </div>
 
-              {/* DELIVERY */}
               <div className="flex justify-between mt-2 text-xs">
                 <span>
                   {shop.deliveryFee === 0
@@ -195,7 +190,6 @@ export default function ShopsGrid({ onAddToCart }: Props) {
                 </span>
                 <span>Min ₹{shop.minOrder || 100}</span>
               </div>
-
             </div>
 
           </button>
@@ -203,7 +197,6 @@ export default function ShopsGrid({ onAddToCart }: Props) {
 
       </div>
 
-      {/* EMPTY STATE */}
       {filteredShops.length === 0 && (
         <div className="text-center py-10 text-gray-500">
           No shops found

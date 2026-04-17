@@ -1,43 +1,90 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
+
+import SellerSidebar from './SellerSidebar'; // ✅ FIXED
 import SellerTopbar from './SellerTopbar';
 import SellerKPICards from './SellerKPICards';
 import SellerOrdersTable from './SellerOrdersTable';
 import SellerProductPanel from './SellerProductPanel';
 import SellerSalesChart from './SellerSalesChart';
-import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
 import SellerWallet from './SellerWallet';
-import Link from 'next/link';
-import SellerSidebar from './SellerSidebar';
 
-export default function SellerDashboardClient({ activeTab, setActiveTab, setOrderCount }: any) {
+export default function SellerDashboardClient({
+  activeTab,
+  setActiveTab,
+  setOrderCount,
+  orderCount,
+}: any) {
 
+  const [sellerId, setSellerId] = useState<string | null>(null);
+  const [toggleLoading, setToggleLoading] = useState(false);
+  const [profileName, setProfileName] = useState<string>('Loading...');
   const [isOpen, setIsOpen] = useState<boolean | null>(null);
   const [isAcceptingOrders, setIsAcceptingOrders] = useState<boolean | null>(null);
+  const [shopName, setShopName] = useState('');
+
   const [orders, setOrders] = useState<any[]>([]);
   const [prevOrderIds, setPrevOrderIds] = useState<string[]>([]);
 
-  useEffect(() => {
-  const fetchShopStatus = async () => {
-    const { data } = await supabase
-      .from('sellers')
-      .select('is_open, is_accepting_orders')
-      .eq('id', 'seller_1')
-      .single();
+// 🔥 INIT (Auth + Profile + Seller)
+useEffect(() => {
+  const init = async () => {
+    const { data: userData } = await supabase.auth.getUser();
 
-    if (data) {
-      setIsOpen(data.is_open);
-      setIsAcceptingOrders(data.is_accepting_orders);
+    if (!userData.user) {
+      window.location.href = '/login';
+      return;
     }
+
+    const userId = userData.user.id;
+
+    // ✅ Fetch profile + seller in parallel (better performance)
+    const [profileRes, sellerRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', userId)
+        .maybeSingle(),
+
+      supabase
+        .from('sellers')
+        .select('id, is_open, is_accepting_orders, is_onboarded, shop_name')
+        .eq('id', userId)
+        .maybeSingle(),
+    ]);
+
+    const profile = profileRes.data;
+    const seller = sellerRes.data;
+
+    if (profile?.name) setProfileName(profile.name);
+
+    if (!seller) {
+      alert('Seller row missing');
+      return;
+    }
+
+    if (!seller.is_onboarded) {
+      window.location.href = '/onboarding/seller';
+      return;
+    }
+
+    setSellerId(seller.id);
+    setIsOpen(seller.is_open);
+    setIsAcceptingOrders(seller.is_accepting_orders);
+    setShopName(seller.shop_name || '');
   };
 
-  fetchShopStatus();
+  init();
 }, []);
 
+
+// 🔥 REALTIME (Seller status sync)
 useEffect(() => {
+  if (!sellerId) return;
+
   const channel = supabase
     .channel('seller-self')
     .on(
@@ -46,12 +93,9 @@ useEffect(() => {
         event: 'UPDATE',
         schema: 'public',
         table: 'sellers',
-        filter: 'id=eq.seller_1',
+        filter: `id=eq.${sellerId}`,
       },
       (payload) => {
-        console.log('SELF UPDATE:', payload);
-
-        // 🔥 instant sync with DB
         setIsOpen(payload.new.is_open);
         setIsAcceptingOrders(payload.new.is_accepting_orders);
       }
@@ -61,198 +105,169 @@ useEffect(() => {
   return () => {
     supabase.removeChannel(channel);
   };
-}, []);
-
-  useEffect(() => {
-    const fetchOrders = async () => {
-      const { data, error } = await supabase
-        .from('orders')
-.select(`
-  *,
-  order_items (*)
-`)
-.eq('seller_id', 'seller_1') // TEMP HARDCODE
-.order('created_at', { ascending: false });
+}, [sellerId]);
 
 
-      if (!error && data) {
-        const currentIds = data.map((o) => o.id);
+// 🔥 ORDERS (Fetch + Realtime)
+useEffect(() => {
+  if (!sellerId) return;
 
-        const hasNewOrder = currentIds.some(
-          (id) => !prevOrderIds.includes(id)
-        );
+  const fetchOrders = async () => {
+    const { data } = await supabase
+      .from('orders')
+      .select(`*, order_items (*)`)
+      .eq('seller_id', sellerId)
+      .order('created_at', { ascending: false });
 
-        if (prevOrderIds.length > 0 && hasNewOrder) {
-          toast.success('New order received 🔥');
+    if (data) {
+      const ids = data.map((o) => o.id);
 
-          const audio = new Audio('/notification.mp3');
-          audio.play().catch(() => {});
-        }
-
-        setPrevOrderIds(currentIds);
-        setOrders(data);
-        const pendingOrders = data.filter((o) => o.status === 'pending');
-        setOrderCount?.(pendingOrders.length);
+      if (
+        prevOrderIds.length > 0 &&
+        ids.some((id) => !prevOrderIds.includes(id))
+      ) {
+        toast.success('New order 🔥');
       }
-    };
 
-    fetchOrders();
+      setPrevOrderIds(ids);
+      setOrders(data);
 
-    const channel = supabase
-      .channel('seller-orders')
+      const pending = data.filter((o) => o.status === 'pending');
+      setOrderCount?.(pending.length);
+    }
+  };
 
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'orders',
-        },
-        () => {
-          fetchOrders();
-        }
-      )
+  // initial fetch
+  fetchOrders();
 
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'orders',
-        },
-        () => {
-          fetchOrders();
-        }
-      )
+  // ✅ UNIQUE CHANNEL NAME (important)
+  const channel = supabase.channel(`orders-${sellerId}`);
 
-      .subscribe();
+  // ✅ attach BEFORE subscribe
+  channel.on(
+    'postgres_changes',
+    {
+      event: '*',
+      schema: 'public',
+      table: 'orders',
+      filter: `seller_id=eq.${sellerId}`,
+    },
+    () => {
+      fetchOrders();
+    }
+  );
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [prevOrderIds]);
+  channel.subscribe();
 
-  useEffect(() => {
-    const unlockAudio = () => {
-      const audio = new Audio('/notification.mp3');
-      audio.play().catch(() => {});
-      document.removeEventListener('click', unlockAudio);
-    };
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [sellerId]);
 
-    document.addEventListener('click', unlockAudio);
 
-    return () => {
-      document.removeEventListener('click', unlockAudio);
-    };
-  }, []);
+// 🔥 ACTIONS (Optimistic UI + DB sync)
 
-  const sellerOrders = orders;
-  const toggleOpen = async () => {
-  if (isOpen === null) return;
+// Toggle store open/close
+const toggleOpen = async () => {
+  if (!sellerId || isOpen === null) return;
+
+  setToggleLoading(true); // 🔥 start loading
 
   const newOpen = !isOpen;
-  const newAccepting = newOpen ? true : false; // 🔥 always sync
 
   setIsOpen(newOpen);
-  setIsAcceptingOrders(newAccepting);
+  setIsAcceptingOrders(newOpen);
 
-  const { data, error } = await supabase
+  await supabase
     .from('sellers')
     .update({
       is_open: newOpen,
-      is_accepting_orders: newAccepting,
+      is_accepting_orders: newOpen,
     })
-    .eq('id', 'seller_1')
-    .select();
+    .eq('id', sellerId);
 
-  console.log("UPDATE RESULT:", data, error);
+  setToggleLoading(false); // 🔥 stop loading
 };
 
+
+// Toggle accepting orders
 const toggleAccepting = async () => {
-  if (isAcceptingOrders === null || !isOpen) return;
+  if (!sellerId || isAcceptingOrders === null || !isOpen) return;
+
+  setToggleLoading(true);
 
   const newStatus = !isAcceptingOrders;
 
   setIsAcceptingOrders(newStatus);
 
-  const { data, error } = await supabase
+  await supabase
     .from('sellers')
     .update({ is_accepting_orders: newStatus })
-    .eq('id', 'seller_1')
-    .select();
+    .eq('id', sellerId);
 
-  console.log("ACCEPTING UPDATE:", data, error);
+  setToggleLoading(false);
 };
 
   return (
-  <div className="flex h-screen">
+    <div className="flex h-screen">
 
-    {/* ✅ MAIN CONTENT */}
-    <div className="flex-1 overflow-y-auto">
-
-      <Toaster position="top-right" richColors />
-
-      <SellerTopbar
-        isOpen={isOpen ?? false}
+      {/* SIDEBAR */}
+      <SellerSidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        orderCount={orderCount}
         isAcceptingOrders={isAcceptingOrders ?? false}
-        onToggleOpen={toggleOpen}
         onToggleAccepting={toggleAccepting}
+        profileName={profileName}
       />
 
-      <div className="px-4 lg:px-8 2xl:px-12 pb-8 max-w-screen-2xl mx-auto">
-        
-        {/* WALLET */}
-        <div className="mb-6">
-          <SellerWallet />
-        </div>
+      {/* MAIN */}
+      <div className="flex-1 overflow-y-auto">
 
-        {/* DASHBOARD */}
-        {activeTab === 'dashboard' && (
-          <>
-            <SellerKPICards />
+        <Toaster position="top-right" richColors />
 
-            <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 gap-6">
-              
-              <div className="xl:col-span-2">
-                <SellerOrdersTable 
-                  orders={orders} 
-                  setOrders={setOrders}
-                />
-              </div>
+        <SellerTopbar
+          isOpen={isOpen ?? false}
+          isAcceptingOrders={isAcceptingOrders ?? false}
+          onToggleOpen={toggleOpen}
+          onToggleAccepting={toggleAccepting}
+          profileName={profileName}
+          shopName={shopName}
+          isLoading={toggleLoading} 
+        />
 
-              <div className="space-y-6">
-                <SellerSalesChart />
-                <SellerProductPanel />
-              </div>
+        <div className="px-4 lg:px-8 pb-8 max-w-screen-2xl mx-auto">
 
-            </div>
-          </>
-        )}
-
-        {/* ORDERS */}
-        {activeTab === 'orders' && (
-          <SellerOrdersTable 
-            orders={orders} 
-            setOrders={setOrders}
-          />
-        )}
-
-        {/* PRODUCTS */}
-        {activeTab === 'products' && <SellerProductPanel />}
-
-        {/* ANALYTICS */}
-        {activeTab === 'analytics' && <SellerSalesChart />}
-
-        {/* SETTINGS */}
-        {activeTab === 'settings' && (
-          <div className="p-6 bg-white rounded-xl shadow">
-            Settings coming soon ⚙️
+          <div className="mb-6">
+            <SellerWallet />
           </div>
-        )}
 
+          {activeTab === 'dashboard' && (
+            <>
+              <SellerKPICards />
+
+              <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <div className="xl:col-span-2">
+                  <SellerOrdersTable orders={orders} setOrders={setOrders} />
+                </div>
+
+                <div className="space-y-6">
+                  <SellerSalesChart />
+                  <SellerProductPanel />
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'orders' && (
+            <SellerOrdersTable orders={orders} setOrders={setOrders} />
+          )}
+
+          {activeTab === 'products' && <SellerProductPanel />}
+          {activeTab === 'analytics' && <SellerSalesChart />}
+
+        </div>
       </div>
     </div>
-
-  </div>
-);
+  );
 }

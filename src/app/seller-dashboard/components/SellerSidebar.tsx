@@ -1,16 +1,16 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Package, Box, BarChart3, Settings } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   orderCount: number;
-
-  // 🔥 NEW PROPS
   isAcceptingOrders: boolean;
   onToggleAccepting: () => void;
+  profileName: string; // ✅ NEW
 }
 
 export default function SellerSidebar({
@@ -19,6 +19,7 @@ export default function SellerSidebar({
   orderCount,
   isAcceptingOrders,
   onToggleAccepting,
+  profileName, // ✅ ADD THIS
 }: Props) {
 
   // ✅ MENU CONFIG
@@ -29,6 +30,8 @@ export default function SellerSidebar({
     { id: "analytics", label: "Analytics", icon: BarChart3 },
     { id: "settings", label: "Settings", icon: Settings },
   ];
+  
+
 
   return (
     <div className="w-64 bg-[#f8f8f8] h-screen flex flex-col justify-between p-4">
@@ -117,8 +120,13 @@ export default function SellerSidebar({
             N
           </div>
           <div>
-            <p className="text-sm font-medium">Rajan Kumar</p>
-            <p className="text-xs text-gray-500">Fresh Basket Store</p>
+<p className="text-sm font-medium">
+  {profileName}
+</p>
+
+<p className="text-xs text-gray-500">
+  Seller
+</p>
           </div>
         </div>
       </div>
