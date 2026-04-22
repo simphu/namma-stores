@@ -10,7 +10,7 @@ type CartItem = {
   qty: number;
   shopId: string;
   shopName: string;
-  image?: string; // ✅ ADD THIS
+  image?: string | null;
 };
 
 type CartContextType = {
@@ -20,6 +20,7 @@ type CartContextType = {
   removeItem: (id: string) => Promise<void>;
   updateQty: (id: string, qty: number) => Promise<void>;
   clearCart: () => Promise<void>;
+  refreshCart: () => Promise<void>;
 };
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -37,50 +38,57 @@ export const CartProvider = ({ children }: any) => {
 
   // 🔥 GET USER
   useEffect(() => {
-    const getUser = async () => {
+    const init = async () => {
       const { data } = await supabase.auth.getUser();
       if (data.user) {
         setUserId(data.user.id);
+      } else {
+        setLoading(false);
       }
     };
-
-    getUser();
+    init();
   }, []);
 
-  // 🔥 FETCH CART
+  // 🔥 FETCH CART (JOIN FIX)
   const fetchCart = async (uid: string) => {
+    setLoading(true);
+
     const { data, error } = await supabase
       .from('cart')
-      .select('*')
-      .eq('user_id', uid);
+      .select(`
+        *,
+        seller_products (
+          image_url
+        )
+      `)
+      .eq('user_id', uid)
+      .order('created_at', { ascending: true });
 
     if (error) {
       console.error(error);
+      setLoading(false);
       return;
     }
 
-    const formatted = data.map((item) => ({
-  id: item.product_id,
-  name: item.product_name,
-  price: item.price,
-  qty: item.quantity,
-  shopId: item.seller_id,
-  shopName: item.shop_name,
-  image: item.product_image, // ✅ ADD
-}));
+    const formatted = (data || []).map((item: any) => ({
+      id: item.product_id,
+      name: item.product_name,
+      price: Number(item.price),
+      qty: Number(item.quantity),
+      shopId: item.seller_id,
+      shopName: item.shop_name,
+      image: item.seller_products?.image_url || null, // ✅ JOIN FIX
+    }));
 
     setItems(formatted);
     setLoading(false);
   };
 
-  // 🔥 LOAD CART AFTER USER
   useEffect(() => {
-    if (userId) {
-      fetchCart(userId);
-    }
+    if (userId) fetchCart(userId);
   }, [userId]);
 
-  // 🔥 ADD ITEM
+  // 🔥 ADD ITEM (NO IMAGE STORAGE)
   const addItem = async (item: Omit<CartItem, 'qty'>) => {
     if (!userId) return;
 
@@ -98,21 +106,20 @@ export const CartProvider = ({ children }: any) => {
         .eq('id', existing.id);
     } else {
       await supabase.from('cart').insert({
-  user_id: userId,
-  product_id: item.id,
-  product_name: item.name,
-  price: item.price,
-  quantity: 1,
-  seller_id: item.shopId,
-  shop_name: item.shopName,
-  product_image: item.image // ✅ ADD THIS
-});
+        user_id: userId,
+        product_id: item.id,
+        product_name: item.name,
+        price: item.price,
+        quantity: 1,
+        seller_id: item.shopId,
+        shop_name: item.shopName,
+      });
     }
 
     fetchCart(userId);
   };
 
-  // 🔥 REMOVE ITEM
+  // 🔥 REMOVE
   const removeItem = async (id: string) => {
     if (!userId) return;
 
@@ -153,7 +160,15 @@ export const CartProvider = ({ children }: any) => {
 
   return (
     <CartContext.Provider
-      value={{ items, loading, addItem, removeItem, updateQty, clearCart }}
+      value={{
+        items,
+        loading,
+        addItem,
+        removeItem,
+        updateQty,
+        clearCart,
+        refreshCart: () => userId ? fetchCart(userId) : Promise.resolve(),
+      }}
     >
       {children}
     </CartContext.Provider>

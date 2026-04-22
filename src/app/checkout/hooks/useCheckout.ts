@@ -2,155 +2,129 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-type DeliveryMode = 'delivery' | 'pickup';
-type PaymentMode = 'cod' | 'online';
-
 export const useCheckout = () => {
+  const router = useRouter();
+
   const [items, setItems] = useState<any[]>([]);
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
 
-  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('delivery');
-  const [paymentMode, setPaymentMode] = useState<'online'>('online');
+  const [deliveryMode, setDeliveryMode] = useState<'delivery' | 'pickup'>('delivery');
   const [instructions, setInstructions] = useState('');
   const [seller, setSeller] = useState<any>(null);
+
   const [placing, setPlacing] = useState(false);
   const [loaded, setLoaded] = useState(false);
-
   const [userId, setUserId] = useState<string | null>(null);
 
-  // 🔥 INIT
+  // INIT
   useEffect(() => {
-  const init = async () => {
-    const { data } = await supabase.auth.getUser();
-    const uid = data.user?.id || null;
+    const init = async () => {
+      const { data } = await supabase.auth.getUser();
+      const uid = data.user?.id || null;
 
-    setUserId(uid);
+      setUserId(uid);
 
-    if (uid) {
-      await fetchCart(uid); // ✅ PASS UID
-      await fetchAddresses(uid);
+      if (uid) {
+        await fetchCart(uid);
+        await fetchAddresses(uid);
+      }
+
+      setLoaded(true);
+    };
+
+    init();
+  }, []);
+
+  // FETCH CART
+  const fetchCart = async (uid: string) => {
+    const { data } = await supabase
+      .from('cart')
+      .select(`
+        *,
+        seller_products ( image_url )
+      `)
+      .eq('user_id', uid);
+
+    const formatted = (data || []).map((item: any) => ({
+      id: item.product_id,
+      name: item.product_name,
+      price: Number(item.price),
+      qty: Number(item.quantity),
+      shopId: item.seller_id,
+      shopName: item.shop_name,
+      image: item.seller_products?.image_url || null,
+    }));
+
+    setItems(formatted);
+
+    if (data?.length) {
+      const { data: sellerData } = await supabase
+        .from('sellers')
+        .select('*')
+        .eq('id', data[0].seller_id)
+        .single();
+
+      setSeller(sellerData);
     }
-
-    setLoaded(true);
   };
 
-  init();
-}, []);
-
-  const fetchSeller = async (sellerId: string) => {
-  const { data } = await supabase
-    .from('sellers')
-    .select('*')
-    .eq('id', sellerId)
-    .single();
-
-  setSeller(data);
-};
-
-  // 🔥 FETCH CART
-  const fetchCart = async (uid: string) => {
-  const { data } = await supabase
-    .from('cart')
-    .select('*')
-    .eq('user_id', uid)
-    .order('created_at', { ascending: true });
-
-  const formatted = (data || []).map((item) => ({
-    id: item.product_id,
-    name: item.product_name,
-    price: Number(item.price) || 0,
-    qty: Number(item.quantity) || 0,
-    shopId: item.seller_id,
-    shopName: item.shop_name,
-    image: item.product_image,
-  }));
-
-  setItems(formatted);
-
-  if (data?.length) {
-    await fetchSeller(data[0].seller_id);
-  }
-};
-
-  // 🔥 FETCH ADDRESS
-  const fetchAddresses = async (uid: string | null) => {
-    if (!uid) return;
-
+  // FETCH ADDRESS
+  const fetchAddresses = async (uid: string) => {
     const { data } = await supabase
       .from('addresses')
       .select('*')
       .eq('user_id', uid);
 
     setAddresses(data || []);
-
-    if (data?.length) {
-      setSelectedAddress(data[0].id);
-    }
+    if (data?.length) setSelectedAddress(data[0].id);
   };
 
-  // 🔥 ADD ADDRESS
-  const handleAddAddress = async () => {
-    if (!userId) {
-      alert('Login required');
-      return;
-    }
-
-    const label = prompt('Enter address name');
-    const address = prompt('Enter full address');
-
-    if (!label || !address) return;
-
-    const { data } = await supabase
-      .from('addresses')
-      .insert({
-        user_id: userId,
-        label,
-        address,
-      })
-      .select()
-      .single();
-
-    setAddresses((prev) => [...prev, data]);
-    setSelectedAddress(data.id);
-  };
-
-  // 🔥 UPDATE QTY
+  // UPDATE QTY
   const updateQty = async (id: string, qty: number) => {
-  if (!userId) return;
+    if (!userId) return;
 
-  if (qty <= 0) {
-    await supabase
-      .from('cart')
-      .delete()
-      .eq('product_id', id)
-      .eq('user_id', userId); // ✅ FIX
-  } else {
-    await supabase
-      .from('cart')
-      .update({ quantity: qty })
-      .eq('product_id', id)
-      .eq('user_id', userId); // ✅ FIX
-  }
+    if (qty <= 0) {
+      await supabase.from('cart').delete().eq('product_id', id).eq('user_id', userId);
+    } else {
+      await supabase
+        .from('cart')
+        .update({ quantity: qty })
+        .eq('product_id', id)
+        .eq('user_id', userId);
+    }
 
-  fetchCart(userId);
-};
+    fetchCart(userId);
+  };
 
-  // 🔥 CALCULATIONS
+  // CALCULATIONS
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
-  const totalItems = items.reduce((s, i) => s + i.qty, 0);
-  const deliveryFee =
-    deliveryMode === 'delivery' ? (subtotal > 299 ? 0 : 25) : 0;
+  const deliveryFee = deliveryMode === 'delivery' ? 25 : 0;
   const total = subtotal + deliveryFee;
+  const totalItems = items.reduce((s, i) => s + i.qty, 0);
 
-  // 🔥 PLACE ORDER
+  // PLACE ORDER
   const handlePlaceOrder = async () => {
     if (!userId) {
-      alert('Login required');
+      router.push('/login?redirect=/checkout');
       return;
     }
+
+    if (!items.length) {
+      toast.error('Cart is empty');
+      return;
+    }
+
+    if (deliveryMode === 'delivery' && !selectedAddress) {
+      toast.error('Select address');
+      return;
+    }
+
+    const addressText =
+      addresses.find((a) => a.id === selectedAddress)?.address || 'Pickup';
 
     setPlacing(true);
 
@@ -162,10 +136,10 @@ export const useCheckout = () => {
           user_id: userId,
           seller_id: items[0]?.shopId,
           total,
-          order_type: 'store',
+          order_type: 'store', // ✅ FIX
           delivery_mode: deliveryMode,
           item_count: totalItems,
-          address: 'Whitefield',
+          address: addressText, // ✅ FIX
           area: 'Whitefield',
           items,
           instructions,
@@ -174,48 +148,42 @@ export const useCheckout = () => {
 
       const data = await res.json();
 
-      if (data.success) {
-        await supabase.from('cart').delete();
-        toast.success('Order placed 🎉');
-      } else {
-        alert(data.error);
+      if (!res.ok) {
+        throw new Error(data.error || 'Order failed');
       }
-    } catch (err) {
+
+      await supabase.from('cart').delete().eq('user_id', userId);
+
+      toast.success(`Order placed 🎉`);
+
+      setTimeout(() => {
+        router.push('/');
+      }, 2000);
+
+    } catch (err: any) {
       console.error(err);
-      alert('Failed');
+      toast.error(err.message || 'Failed');
     } finally {
       setPlacing(false);
     }
   };
 
   return {
-    // data
     items,
     addresses,
     selectedAddress,
     userId,
-
-    // setters
     setSelectedAddress,
     setDeliveryMode,
-    setPaymentMode,
     setInstructions,
-
-    // states
     deliveryMode,
-    paymentMode,
     instructions,
     placing,
     loaded,
-
-    // calculations
     subtotal,
     total,
     totalItems,
     deliveryFee,
-
-    // actions
-    handleAddAddress,
     updateQty,
     handlePlaceOrder,
     seller,
