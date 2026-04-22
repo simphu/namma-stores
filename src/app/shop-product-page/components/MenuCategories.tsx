@@ -3,25 +3,17 @@
 import { useState } from 'react';
 import ProductRow from './ProductRow';
 
-interface Props {
-  products: any[];
-  shopId: string;
-  shopName: string;
-  isAcceptingOrders: boolean;
-  isOpen: boolean; // ✅ shop status
-}
-
 export default function MenuCategories({
   products,
   shopId,
   shopName,
   isAcceptingOrders,
-  isOpen, // ✅ RECEIVE FROM PARENT
-}: Props) {
+  isOpen,
+}: any) {
 
-  // 🔥 GROUP BY CATEGORY
+  // 🔥 GROUP BY CATEGORY NAME
   const grouped = products.reduce((acc: any, product: any) => {
-    const category = product.category || 'Recommended';
+    const category = product.categories?.name || 'Recommended';
 
     if (!acc[category]) acc[category] = [];
     acc[category].push(product);
@@ -30,37 +22,28 @@ export default function MenuCategories({
   }, {});
 
   const categories = Object.keys(grouped);
-
-  // 🔥 CATEGORY UI STATE (NOT SHOP STATE)
   const [openCategory, setOpenCategory] = useState(categories[0]);
 
   return (
     <div className="px-4 py-3 pb-40">
 
       {categories.map((cat) => {
-        const isCategoryOpen = openCategory === cat; // ✅ FIXED NAME
+        const isOpenCat = openCategory === cat;
 
         return (
           <div key={cat} className="mb-4 border rounded-xl overflow-hidden">
 
-            {/* CATEGORY HEADER */}
             <button
-              onClick={() =>
-                setOpenCategory(isCategoryOpen ? '' : cat)
-              }
-              className="w-full flex justify-between items-center px-4 py-3 bg-gray-50"
+              onClick={() => setOpenCategory(isOpenCat ? '' : cat)}
+              className="w-full flex justify-between px-4 py-3 bg-gray-50"
             >
-              <span className="font-semibold text-gray-800">
+              <span className="font-semibold">
                 {cat} ({grouped[cat].length})
               </span>
-
-              <span className="text-sm">
-                {isCategoryOpen ? '▲' : '▼'}
-              </span>
+              <span>{isOpenCat ? '▲' : '▼'}</span>
             </button>
 
-            {/* PRODUCTS */}
-            {isCategoryOpen && (
+            {isOpenCat && (
               <div className="divide-y">
                 {grouped[cat].map((p: any) => (
                   <ProductRow
@@ -68,19 +51,17 @@ export default function MenuCategories({
                     product={{
                       id: p.id,
                       name: p.name,
-                      description: p.description || '',
+                      description: p.description,
                       price: p.price,
-                      originalPrice: p.original_price || p.price,
-                      image: p.image || '',
+                      originalPrice: p.price,
+                      image: p.image_url,
                       imageAlt: p.name,
                       tag: p.is_best_seller ? 'Bestseller' : undefined,
-                      isVeg: p.type === 'veg',
-                      rating: p.rating || 4.2,
+                      isVeg: p.food_type === 'veg',
+                      rating: 4.2,
                     }}
                     shopId={shopId}
                     shopName={shopName}
-
-                    // ✅ REAL SHOP STATUS (IMPORTANT)
                     isAcceptingOrders={isAcceptingOrders}
                     isOpen={isOpen}
                   />
@@ -91,7 +72,6 @@ export default function MenuCategories({
           </div>
         );
       })}
-
     </div>
   );
 }

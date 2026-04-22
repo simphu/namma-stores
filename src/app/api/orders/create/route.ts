@@ -1,9 +1,16 @@
+// /src/app/api/orders/create/route.ts
+
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+// ✅ SERVER-SIDE SUPABASE (IMPORTANT)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // 🔥 MUST ADD IN ENV
+);
 
 export async function POST(req: Request) {
   try {
-    // ✅ READ BODY ONLY ONCE (IMPORTANT FIX)
     const body = await req.json();
 
     const {
@@ -15,11 +22,11 @@ export async function POST(req: Request) {
       delivery_mode,
       item_count,
       area,
-      items,           // ✅ NEW
-      instructions     // ✅ NEW
+      items,
+      instructions
     } = body;
 
-    // 🚨 VALIDATION
+    // 🔒 STRICT VALIDATION
     if (!user_id || !seller_id || !total || !order_type) {
       return NextResponse.json(
         { error: 'Missing required fields' },
@@ -32,7 +39,10 @@ export async function POST(req: Request) {
     let seller_earning = 0;
     let margin = 0;
 
-    // ✅ COMMISSION LOGIC
+    // ================================
+    // 💰 COMMISSION / MARGIN LOGIC
+    // ================================
+
     if (['store', 'catering', 'bulk'].includes(order_type)) {
       const { data, error } = await supabase
         .from('commission_config')
@@ -40,14 +50,16 @@ export async function POST(req: Request) {
         .eq('type', order_type)
         .single();
 
-      if (error || !data) throw new Error('Commission config missing');
+      if (error || !data) {
+        console.error("❌ Commission config missing:", error);
+        throw new Error('Commission config missing');
+      }
 
       commission_rate = data.commission_rate;
       platform_earning = total * commission_rate;
       seller_earning = total - platform_earning;
     }
 
-    // ✅ NAMMA FRESH (MARGIN MODEL)
     else if (order_type === 'namma_fresh') {
       const { data, error } = await supabase
         .from('margin_config')
@@ -55,7 +67,10 @@ export async function POST(req: Request) {
         .eq('type', 'namma_fresh')
         .single();
 
-      if (error || !data) throw new Error('Margin config missing');
+      if (error || !data) {
+        console.error("❌ Margin config missing:", error);
+        throw new Error('Margin config missing');
+      }
 
       margin = total * data.margin_rate;
       platform_earning = margin;
@@ -67,10 +82,12 @@ export async function POST(req: Request) {
       seller_id,
       total,
       order_type,
-      seller_earning
     });
 
-    // ✅ 1. INSERT ORDER + GET ID
+    // ================================
+    // 🧾 1. INSERT ORDER
+    // ================================
+
     const { data: orderData, error: insertError } = await supabase
       .from('orders')
       .insert({
@@ -92,19 +109,25 @@ export async function POST(req: Request) {
         delivery_status: 'pending',
         payment_status: 'pending',
 
-        // ⚠️ TEMP STATIC (later replace with real user data)
-        customer_name: 'Rajan Kumar',
-        customer_phone: '9876543210',
+        customer_name: 'Guest User',
+        customer_phone: '9999999999',
       })
       .select()
       .single();
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error("❌ ORDER INSERT ERROR:", insertError);
+      throw insertError;
+    }
 
-    // ✅ 2. INSERT ORDER ITEMS (VERY IMPORTANT)
+    // ================================
+    // 🧾 2. INSERT ORDER ITEMS
+    // ================================
+
     if (items && items.length > 0) {
       const orderItems = items.map((item: any) => ({
         order_id: orderData.id,
+        product_id: item.id, // 🔥 IMPORTANT FIX
         name: item.name,
         price: item.price,
         qty: item.qty,
@@ -115,16 +138,22 @@ export async function POST(req: Request) {
         .insert(orderItems);
 
       if (itemsError) {
-        console.error("❌ Order items insert error:", itemsError);
+        console.error("❌ ORDER ITEMS ERROR:", itemsError);
       }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      order_id: orderData.id,
+    });
 
-  } catch (error) {
-    console.error('Create Order Error:', error);
+  } catch (error: any) {
+    console.error('🔥 CREATE ORDER ERROR:', error);
+
     return NextResponse.json(
-      { error: 'Failed to create order' },
+      {
+        error: error.message || 'Failed to create order',
+      },
       { status: 500 }
     );
   }

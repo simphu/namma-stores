@@ -1,8 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import AppImage from '@/components/ui/AppImage';
-import Icon from '@/components/ui/AppIcon';
 import { useCart } from '@/contexts/CartContext';
 import { supabase } from '@/lib/supabase';
 
@@ -38,10 +37,20 @@ export default function ProductRow({
 
   const { items, addItem, updateQty } = useCart();
 
+  const [userId, setUserId] = useState<string | null>(null);
+
   const cartItem = items.find((i) => String(i.id) === String(product.id));
   const qty = cartItem?.qty || 0;
-
   const disabled = !isOpen || !isAcceptingOrders;
+
+  // ✅ GET USER (CORRECT WAY)
+  useEffect(() => {
+    const getUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      setUserId(data.user?.id || null);
+    };
+    getUser();
+  }, []);
 
   // 🔥 DISCOUNT
   const discount =
@@ -52,100 +61,92 @@ export default function ProductRow({
         )
       : null;
 
-  // 🔥 SYNC WITH DB
-  const syncCart = async (newQty: number) => {
-  try {
-    console.log('SYNC CART', product.id, newQty);
+  // ✅ SYNC CART (PRODUCTION SAFE)
+  // const syncCart = async (newQty: number) => {
+  //   try {
+  //     if (!userId) {
+  //       console.error('User not logged in');
+  //       return;
+  //     }
 
-    if (newQty <= 0) {
-      const { error } = await supabase
-        .from('cart')
-        .delete()
-        .eq('product_id', product.id);
+  //     // 🔥 DELETE
+  //     if (newQty <= 0) {
+  //       await supabase
+  //         .from('cart')
+  //         .delete()
+  //         .eq('product_id', product.id)
+  //         .eq('user_id', userId);
 
-      if (error) console.error('DELETE ERROR', error);
-      return;
-    }
+  //       return;
+  //     }
 
-    const { data: existing, error: fetchError } = await supabase
-      .from('cart')
-      .select('*')
-      .eq('product_id', product.id)
-      .maybeSingle(); // ✅ FIX
+  //     // 🔥 CHECK EXISTING
+  //     const { data: existing } = await supabase
+  //       .from('cart')
+  //       .select('*')
+  //       .eq('product_id', product.id)
+  //       .eq('user_id', userId)
+  //       .maybeSingle();
 
-    if (fetchError) {
-      console.error('FETCH ERROR', fetchError);
-      return;
-    }
+  //     if (existing) {
+  //       // 🔥 UPDATE
+  //       await supabase
+  //         .from('cart')
+  //         .update({ quantity: newQty })
+  //         .eq('product_id', product.id)
+  //         .eq('user_id', userId);
+  //     } else {
+  //       // 🔥 INSERT
+  //       await supabase.from('cart').insert({
+  //         product_id: product.id,
+  //         quantity: newQty,
+  //         product_name: product.name,
+  //         price: product.price,
+  //         seller_id: shopId,
+  //         shop_name: shopName,
+  //         product_image: product.image, // ✅ IMPORTANT
+  //         user_id: userId,
+  //       });
+  //     }
 
-    if (existing) {
-      const { error } = await supabase
-        .from('cart')
-        .update({ quantity: newQty })
-        .eq('product_id', product.id);
-
-      if (error) console.error('UPDATE ERROR', error);
-    } else {
-      const { error } = 
-      await supabase.from('cart').insert({
-      product_id: product.id,
-      quantity: newQty,
-      product_name: product.name,
-      price: product.price,
-      seller_id: shopId,
-
-  // TEMP (until auth added)
-  user_id: 'guest_user',
-});
-
-      if (error) console.error('INSERT ERROR', error);
-    }
-
-  } catch (err) {
-    console.error('SYNC FAILED', err);
-  }
-};
+  //   } catch (err) {
+  //     console.error('SYNC FAILED', err);
+  //   }
+  // };
 
   // 🔥 HANDLERS
   const handleAdd = async () => {
-    console.log('ADDING ITEM', product.id);
-    if (disabled) return;
+  if (disabled) return;
 
-    addItem({
-      id: String(product.id),
-      name: product.name,
-      price: product.price,
-      shopId,
-      shopName,
-    });
+  await addItem({
+    id: String(product.id),
+    name: product.name,
+    price: product.price,
+    shopId,
+    shopName,
+  });
+};
 
-    await syncCart(1);
-  };
+const handleIncrease = async () => {
+  if (disabled) return;
 
-  const handleIncrease = async () => {
-    if (disabled) return;
+  await addItem({
+    id: String(product.id),
+    name: product.name,
+    price: product.price,
+    shopId,
+    shopName,
+  });
+};
 
-    addItem({
-      id: String(product.id),
-      name: product.name,
-      price: product.price,
-      shopId,
-      shopName,
-    });
+const handleDecrease = async () => {
+  if (disabled) return;
 
-    await syncCart(qty + 1);
-  };
-
-  const handleDecrease = async () => {
-    if (disabled) return;
-
-    updateQty(String(product.id), qty - 1);
-
-    await syncCart(qty - 1);
-  };
+  await updateQty(String(product.id), qty - 1);
+};
 
   return (
-    <article className="flex items-start gap-4 py-4 border-b border-gray-100 last:border-b-0">
+    <article className="flex items-start gap-4 py-4 border-b border-gray-100">
 
       {/* LEFT */}
       <div className="flex-1 flex flex-col gap-1.5">
@@ -158,28 +159,20 @@ export default function ProductRow({
           }`} />
         </span>
 
-        {product.tag === 'Bestseller' && (
-          <span className="text-xs bg-amber-100 px-2 py-0.5 rounded">
-            Bestseller
-          </span>
-        )}
-
         <h3 className="text-sm font-bold">{product.name}</h3>
-
-        {product.rating && (
-          <span className="text-xs bg-green-600 text-white px-1 rounded">
-            {product.rating}
-          </span>
-        )}
 
         <div className="flex gap-2">
           <span>₹{product.price}</span>
+
           {product.originalPrice && (
             <span className="line-through text-gray-400 text-xs">
               ₹{product.originalPrice}
             </span>
           )}
-          {discount && <span className="text-green-600">{discount}%</span>}
+
+          {discount && (
+            <span className="text-green-600 text-xs">{discount}% OFF</span>
+          )}
         </div>
 
         <p className="text-xs text-gray-500">{product.description}</p>
@@ -189,7 +182,7 @@ export default function ProductRow({
       <div className="relative w-24 h-24">
 
         <AppImage
-          src={product.image}
+          src={product.image || '/placeholder.png'}
           alt={product.imageAlt}
           fill
           className="object-cover rounded-lg"
@@ -203,7 +196,7 @@ export default function ProductRow({
               disabled ? 'bg-gray-300' : 'bg-orange-500 text-white'
             }`}
           >
-            {disabled ? 'Closed' : 'ADD'}
+            ADD
           </button>
         ) : (
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex border bg-white rounded">

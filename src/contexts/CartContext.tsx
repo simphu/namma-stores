@@ -10,10 +10,12 @@ type CartItem = {
   qty: number;
   shopId: string;
   shopName: string;
+  image?: string; // ✅ ADD THIS
 };
 
 type CartContextType = {
   items: CartItem[];
+  loading: boolean;
   addItem: (item: Omit<CartItem, 'qty'>) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
   updateQty: (id: string, qty: number) => Promise<void>;
@@ -30,10 +32,27 @@ export const useCart = () => {
 
 export const CartProvider = ({ children }: any) => {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // ✅ LOAD CART FROM DB
-  const fetchCart = async () => {
-    const { data, error } = await supabase.from('cart').select('*');
+  // 🔥 GET USER
+  useEffect(() => {
+    const getUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        setUserId(data.user.id);
+      }
+    };
+
+    getUser();
+  }, []);
+
+  // 🔥 FETCH CART
+  const fetchCart = async (uid: string) => {
+    const { data, error } = await supabase
+      .from('cart')
+      .select('*')
+      .eq('user_id', uid);
 
     if (error) {
       console.error(error);
@@ -41,57 +60,75 @@ export const CartProvider = ({ children }: any) => {
     }
 
     const formatted = data.map((item) => ({
-      id: item.product_id,
-      name: item.product_name,
-      price: item.price,
-      qty: item.quantity,
-      shopId: item.seller_id,
-      shopName: item.shop_name || 'Store',
-    }));
+  id: item.product_id,
+  name: item.product_name,
+  price: item.price,
+  qty: item.quantity,
+  shopId: item.seller_id,
+  shopName: item.shop_name,
+  image: item.product_image, // ✅ ADD
+}));
 
     setItems(formatted);
+    setLoading(false);
   };
 
+  // 🔥 LOAD CART AFTER USER
   useEffect(() => {
-    fetchCart();
-  }, []);
+    if (userId) {
+      fetchCart(userId);
+    }
+  }, [userId]);
 
-  // ✅ ADD ITEM (DB FIRST)
+  // 🔥 ADD ITEM
   const addItem = async (item: Omit<CartItem, 'qty'>) => {
-    // 🔥 CHECK EXISTING
+    if (!userId) return;
+
     const { data: existing } = await supabase
       .from('cart')
       .select('*')
+      .eq('user_id', userId)
       .eq('product_id', item.id)
-      .single();
+      .maybeSingle();
 
     if (existing) {
       await supabase
         .from('cart')
         .update({ quantity: existing.quantity + 1 })
-        .eq('product_id', item.id);
+        .eq('id', existing.id);
     } else {
       await supabase.from('cart').insert({
-        product_id: item.id,
-        product_name: item.name,
-        price: item.price,
-        quantity: 1,
-        seller_id: item.shopId,
-        shop_name: item.shopName,
-      });
+  user_id: userId,
+  product_id: item.id,
+  product_name: item.name,
+  price: item.price,
+  quantity: 1,
+  seller_id: item.shopId,
+  shop_name: item.shopName,
+  product_image: item.image // ✅ ADD THIS
+});
     }
 
-    await fetchCart();
+    fetchCart(userId);
   };
 
-  // ✅ REMOVE ITEM
+  // 🔥 REMOVE ITEM
   const removeItem = async (id: string) => {
-    await supabase.from('cart').delete().eq('product_id', id);
-    await fetchCart();
+    if (!userId) return;
+
+    await supabase
+      .from('cart')
+      .delete()
+      .eq('user_id', userId)
+      .eq('product_id', id);
+
+    fetchCart(userId);
   };
 
-  // ✅ UPDATE QTY
+  // 🔥 UPDATE QTY
   const updateQty = async (id: string, qty: number) => {
+    if (!userId) return;
+
     if (qty <= 0) {
       await removeItem(id);
       return;
@@ -100,20 +137,23 @@ export const CartProvider = ({ children }: any) => {
     await supabase
       .from('cart')
       .update({ quantity: qty })
+      .eq('user_id', userId)
       .eq('product_id', id);
 
-    await fetchCart();
+    fetchCart(userId);
   };
 
-  // ✅ CLEAR CART
+  // 🔥 CLEAR CART
   const clearCart = async () => {
-    await supabase.from('cart').delete();
+    if (!userId) return;
+
+    await supabase.from('cart').delete().eq('user_id', userId);
     setItems([]);
   };
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQty, clearCart }}
+      value={{ items, loading, addItem, removeItem, updateQty, clearCart }}
     >
       {children}
     </CartContext.Provider>

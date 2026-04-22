@@ -23,7 +23,7 @@ export default function ShopPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      // 🔹 FETCH SHOP
+      // 🔹 SHOP
       const { data: shopData } = await supabase
         .from('sellers')
         .select('*')
@@ -32,47 +32,23 @@ export default function ShopPage() {
 
       setShop(shopData);
 
-      // 🔹 FETCH PRODUCTS
+      // 🔹 PRODUCTS (FIXED)
       let query = supabase
-        .from('product')
-        .select('*')
-        .eq('seller_id', sellerId);
+        .from('seller_products')
+        .select(`*, categories(name)`)
+        .eq('seller_id', sellerId)
+        .eq('is_active', true);
 
       if (search) query = query.ilike('name', `%${search}%`);
-      if (filter === 'veg') query = query.eq('type', 'veg');
-      if (filter === 'non-veg') query = query.eq('type', 'non-veg');
-      if (filter === 'best') query = query.eq('is_best_seller', true);
+      if (filter === 'veg') query = query.eq('food_type', 'veg');
+      if (filter === 'non-veg') query = query.eq('food_type', 'non_veg');
 
       const { data } = await query;
+
       setProducts(data || []);
     };
 
     if (sellerId) fetchData();
-
-    // 🔥 REALTIME FIX (NO POLLING)
-    const channel = supabase
-      .channel(`shop-${sellerId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'sellers',
-          filter: `id=eq.${sellerId}`,
-        },
-        (payload) => {
-          console.log('REALTIME UPDATE:', payload);
-
-          // ✅ instantly update shop state
-          setShop(payload.new);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-
   }, [sellerId, search, filter]);
 
   if (!shop) return <div className="p-4">Loading...</div>;
@@ -83,7 +59,6 @@ export default function ShopPage() {
 
         <ShopHeader shop={shop} />
 
-        {/* 🔥 STORE STATUS */}
         {!shop.is_open && (
           <div className="bg-red-500 text-white text-center py-2 font-semibold">
             Store Closed
